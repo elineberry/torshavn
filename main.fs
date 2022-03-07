@@ -21,6 +21,16 @@ begin-structure unit
 	field: u.color
 	field: u.char
 end-structure
+: units unit * ;
+
+begin-structure item
+	field: i.type
+	field: i.x
+	field: i.y
+	field: i.color
+	field: i.char
+end-structure
+: items item * ;
 
 \ ### CONSTANTS ###
 80 constant map-width
@@ -29,8 +39,15 @@ map-width map-height * constant map-size
 13 constant max-forest-level
 here map-size allot constant map
 here map-size allot constant visible
-here 100 unit * allot constant units
+here map-size units allot constant unit-array
+here map-size items allot constant item-array
+10 constant max-inventory
+here max-inventory items allot constant inventory-array
 char > constant c-exit
+125 constant c-tree1	\ {
+123 constant c-tree2	\ } 
+char ^ constant c-shrub
+char # constant c-rock
 
 \ ### MOVEMENT ###
 : validate-position
@@ -38,6 +55,7 @@ char > constant c-exit
 	rogue.x map-width 1- min to rogue.x
 	rogue.y 0 max to rogue.y
 	rogue.y map-height 1- min to rogue.y ;
+: is-exit? ( n -- flag ) map + c@ c-exit = ;
 : handle-collision ;
 : validate-move ( x-offset y-offset -- flag ) true to do-turn? 2drop true ;
 : move-rogue.x { x-offset }
@@ -62,6 +80,11 @@ char > constant c-exit
 
 \ ### MAP ###
 : n-to-xy ( n -- x y ) map-width /mod ;
+: xy-to-n ( x y -- n ) map-width * + ;
+: .units map-size 0 do i unit-array + u.char c@
+	dup 0> if i n-to-xy at-xy emit else drop then loop ;
+: .items map-size 0 do i item-array + i.char c@ 
+	dup 0> if i n-to-xy at-xy emit else drop then loop ;
 : .map map-size 0 do i map + c@ i n-to-xy at-xy emit loop ;
 : .rogue [char] @ rogue.x rogue.y at-xy emit ;
 
@@ -91,9 +114,34 @@ char > constant c-exit
 : .debug-line
 	0 map-height 2 + at-xy
 	." location : " rogue.x 2 u.r ." ," rogue.y 2 u.r 
+	.tab ." here: " here 12 u.r
 	.tab ." depth : " depth . ;
 
+\ ### ITEMS ###
+1 constant item-axe
+2 constant item-mushroom
+3 constant item-cudgel
+4 constant item-bread
+99 constant item-medicinedrug
+
+: item$ ( n -- n addr )
+	case
+		item-axe of s" A woodman's axe" endof
+		item-mushroom of s" mushroom" endof
+		item-cudgel of s" cudgel" endof
+		item-bread of s" a loaf of bread" endof 
+		item-medicinedrug of s" The medicine drug" endof
+	endcase ;
+
 \ ### COMMANDS ###
+: press-any-key-to-continue 10 map-height at-xy ." Press any key to continue"
+	key drop page ;
+: show-inventory
+	page 10 2 at-xy ." Inventory " cr cr
+	max-inventory 0 do 
+		inventory-array i items + i.type @
+		dup 0> if i . .tab item$ type cr else drop then 		
+	loop press-any-key-to-continue ;
 : repeat-last-message ;
 : show-help ;
 : do-command
@@ -119,16 +167,52 @@ char > constant c-exit
 			[char] M of repeat-last-message endof
 			[char] q of s" Really quit?" toast [char] y <> to is-playing? endof
 			[char] ? of show-help endof
+			[char] i of show-inventory endof
 		endcase
 		;
+
+\ ### GAME SETUP ###
+: starting-inventory
+	item-axe inventory-array i.type !
+	item-mushroom inventory-array 1 items + i.type !
+	item-medicinedrug inventory-array 2 items + i.type ! ;
+: find-empty-place-on-map ( -- n )
+	begin
+		0 map-size random-in-range dup map + c@
+		bl = if true else drop false then
+	until ;
+	
+: populate-level-items 1d6 0 do 
+		[char] % find-empty-place-on-map item-array + i.char ! loop ;
+: populate-level-units 1d6 0 do
+		[char] f find-empty-place-on-map unit-array + u.char ! loop ;
+
 
 \ ### GAME LOOP ###
 : turn+ turn 1+ to turn ;
 : increment-turn do-turn? if turn+ then ;
 : update-fov ;
-: update-ui .debug-line .status-line .map .rogue ;
+: update-ui .debug-line .status-line .map .items .units .rogue ;
 : input-loop begin 10 ms key? until ;
-: game-init page true to is-playing? new-forest-level ;
+: game-init starting-inventory page true to is-playing? 
+	new-forest-level
+	populate-level-units
+	populate-level-items ;
+: erase-level-items unit-array map-size erase ;
+: erase-level-units unit-array map-size erase ;
+: erase-level-map map map-size erase ;
+: erase-level 
+	erase-level-items
+	erase-level-units
+	erase-level-map ;
+: next-level 
+	erase-level
+	new-forest-level
+	populate-level-units
+	populate-level-items
+	find-empty-place-on-map n-to-xy to rogue.y to rogue.x ;	
+: check-for-exit rogue.x rogue.y xy-to-n is-exit?
+	if next-level then ;
 : game-loop
 	hide-cursor
 	util:set-colors
@@ -136,6 +220,7 @@ char > constant c-exit
 	util:set-colors
 	begin
 		false to do-turn?
+		check-for-exit
 		util:set-colors
 		update-fov
 		update-ui
