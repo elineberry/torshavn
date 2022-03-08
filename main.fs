@@ -48,6 +48,7 @@ char > constant c-exit
 123 constant c-tree2	\ } 
 char ^ constant c-shrub
 char # constant c-rock
+5 constant food-velocity
 
 \ ### MOVEMENT ###
 : validate-position
@@ -110,6 +111,7 @@ char # constant c-rock
 	." lvl: " forest-level 3 u.r .tab
 	." dread: " dread 3 u.r .tab
 	." hp: " rogue.hp 3 u.r .tab
+	." food: " rogue.food 4 u.r .tab
 	." strength: " rogue.strength 3 u.r ;
 : .debug-line
 	0 map-height 2 + at-xy
@@ -213,6 +215,13 @@ char # constant c-rock
 	find-empty-place-on-map n-to-xy to rogue.y to rogue.x ;	
 : check-for-exit rogue.x rogue.y xy-to-n is-exit?
 	if next-level then ;
+: is-dead? ( -- flag ) rogue.hp 0> false = ;
+: process-death update-ui s" You died." toast drop false to is-playing? ;
+: decrement-hp ( n -- ) rogue.hp swap - to rogue.hp ;
+: decrement-food turn food-velocity mod 0= 
+	if rogue.food 1- 0 max to rogue.food then ;
+: add-msg ( n addr -- ) 1 map-height at-xy type ;
+: starve rogue.food 0= if s" You're starving" add-msg 1 decrement-hp then ;
 : game-loop
 	hide-cursor
 	util:set-colors
@@ -227,6 +236,9 @@ char # constant c-rock
 		input-loop
 		do-command
 		increment-turn
+		decrement-food
+		starve
+		is-dead? if process-death then
 		is-playing? 0=
 	until
   show-cursor
