@@ -16,19 +16,16 @@ false value do-turn?
 
 \ ### STRUCTS ###
 begin-structure unit
-	field: u.x
-	field: u.y
-	field: u.color
 	field: u.char
+	field: u.color
 end-structure
 : units unit * ;
 
 begin-structure item
 	field: i.type
-	field: i.x
-	field: i.y
-	field: i.color
 	field: i.char
+	field: i.color
+	field: i.padding
 end-structure
 : items item * ;
 
@@ -84,6 +81,7 @@ char # constant c-rock
 \ ### MAP ###
 : n-to-xy ( n -- x y ) map-width /mod ;
 : xy-to-n ( x y -- n ) map-width * + ;
+: rogue.n rogue.x rogue.y xy-to-n ;
 : .units map-size 0 do i unit-array + u.char c@
 	dup 0> if i n-to-xy at-xy emit else drop then loop ;
 : .items map-size 0 do i item-array + i.char c@ 
@@ -118,7 +116,7 @@ char # constant c-rock
 	." strength: " rogue.strength 3 u.r ;
 : .debug-line
 	0 map-height 2 + at-xy
-	." location : " rogue.x 2 u.r ." ," rogue.y 2 u.r 
+	." location : " rogue.n 4 u.r ." :" rogue.x 2 u.r ." ," rogue.y 2 u.r 
 	.tab ." here: " here 12 u.r
 	.tab ." depth : " depth . ;
 
@@ -187,10 +185,14 @@ char # constant c-rock
 		bl = if true else drop false then
 	until ;
 	
+: store-food-item! ( addr -- ) 
+	dup i.char [char] % swap c!
+	item-mushroom swap ! ;	
+	
 : populate-level-items 1d6 0 do 
-		[char] % find-empty-place-on-map item-array + i.char ! loop ;
+		find-empty-place-on-map items item-array + store-food-item! loop ;
 : populate-level-units 1d6 0 do
-		[char] f find-empty-place-on-map unit-array + u.char ! loop ;
+		[char] f find-empty-place-on-map items unit-array + u.char ! loop ;
 
 
 \ ### GAME LOOP ###
@@ -203,7 +205,7 @@ char # constant c-rock
 	new-forest-level
 	populate-level-units
 	populate-level-items ;
-: erase-level-items unit-array map-size erase ;
+: erase-level-items item-array map-size erase ;
 : erase-level-units unit-array map-size erase ;
 : erase-level-map map map-size erase ;
 : erase-level 
@@ -217,9 +219,15 @@ char # constant c-rock
 	populate-level-items
 	find-empty-place-on-map n-to-xy to rogue.y to rogue.x ;	
 : declare-victory update-ui s" You win" toast drop false to is-playing? ;
-: rogue.n rogue.x rogue.y xy-to-n ;
 : check-for-exit rogue.n is-exit?
 	if next-level else rogue.n is-goal? if declare-victory then then ;
+: empty-inventory-slot max-inventory 0 do inventory-array i items + @ 
+	0= if inventory-array i BRK items + unloop exit then loop false ;
+: pick-up-item empty-inventory-slot dup false = 
+	if drop s" No room for item." 
+	else item-array rogue.n items + tuck swap item move item erase then ;
+: am-i-standing-on-something item-array rogue.n items + i.char c@ 0> 
+	if brk pick-up-item then ; 
 : is-dead? ( -- flag ) rogue.hp 0> false = ;
 : process-death update-ui s" You died." toast drop false to is-playing? ;
 : decrement-hp ( n -- ) rogue.hp swap - to rogue.hp ;
@@ -239,10 +247,12 @@ char # constant c-rock
 		update-ui
 		input-loop
 		do-command
-		increment-turn
+		\ check for a turn
+		am-i-standing-on-something
 		check-for-exit
 		decrement-food
 		starve
+		increment-turn
 		is-dead? if process-death then
 		is-playing? 0=
 	until
