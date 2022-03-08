@@ -44,6 +44,7 @@ here map-size items allot constant item-array
 10 constant max-inventory
 here max-inventory items allot constant inventory-array
 char > constant c-exit
+char $ constant c-goal
 125 constant c-tree1	\ {
 123 constant c-tree2	\ } 
 char ^ constant c-shrub
@@ -56,6 +57,7 @@ char # constant c-rock
 	rogue.x map-width 1- min to rogue.x
 	rogue.y 0 max to rogue.y
 	rogue.y map-height 1- min to rogue.y ;
+: is-goal? ( n -- flag ) map + c@ c-goal = ;
 : is-exit? ( n -- flag ) map + c@ c-exit = ;
 : handle-collision ;
 : validate-move ( x-offset y-offset -- flag ) true to do-turn? 2drop true ;
@@ -95,13 +97,14 @@ char # constant c-rock
 	2 of [char] } endof
 	3 of [char] ~ endof
 	>r bl r> endcase ;
-: set-forest-level-exit c-exit 0 map-size random-in-range map + c! ;
+: exit-or-goal forest-level max-forest-level = if c-goal else c-exit then ;
+: set-forest-level-exit exit-or-goal 0 map-size random-in-range map + c! ;
 : new-forest-level 
 	forest-level 1+ to forest-level 
 	seed to forest-level-seed
 	40 to rogue.x
 	12 to rogue.y
-	map-size 0 do 1d6 random-char map i + c! loop 
+	map-size 0 do 3d6 random-char map i + c! loop 
 	set-forest-level-exit ;
 
 \ ### STATUS LINE ###
@@ -213,8 +216,10 @@ char # constant c-rock
 	populate-level-units
 	populate-level-items
 	find-empty-place-on-map n-to-xy to rogue.y to rogue.x ;	
-: check-for-exit rogue.x rogue.y xy-to-n is-exit?
-	if next-level then ;
+: declare-victory update-ui s" You win" toast drop false to is-playing? ;
+: rogue.n rogue.x rogue.y xy-to-n ;
+: check-for-exit rogue.n is-exit?
+	if next-level else rogue.n is-goal? if declare-victory then then ;
 : is-dead? ( -- flag ) rogue.hp 0> false = ;
 : process-death update-ui s" You died." toast drop false to is-playing? ;
 : decrement-hp ( n -- ) rogue.hp swap - to rogue.hp ;
@@ -229,20 +234,19 @@ char # constant c-rock
 	util:set-colors
 	begin
 		false to do-turn?
-		check-for-exit
 		util:set-colors
 		update-fov
 		update-ui
 		input-loop
 		do-command
 		increment-turn
+		check-for-exit
 		decrement-food
 		starve
 		is-dead? if process-death then
 		is-playing? 0=
 	until
-  show-cursor
-;
+  show-cursor ;
 
 : start-new-game random-init game-loop page .debug-check-end ;
 : str start-new-game ;
