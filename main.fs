@@ -242,18 +242,23 @@ char # constant c-rock
 : starve rogue.food 0= if s" You're starving" add-msg 1 decrement-hp then ;
 : populate-move-queue
 	unit-move-queue map-size erase 
-	map-size 0 do i @unit @ 0> if true i unit-move-queue + c! then loop ;
+	map-size 0 do i @unit @ 0> i unit-move-queue + c! loop ;
 : move-unit ( from-unit-no to-unit-no -- ) 
 	@unit 					\ from-no to-addr
 	over @unit			\ from-no to-addr from-addr
 	swap						\ from-no from-addr to-addr
 	unit move
 	@unit unit erase ;
+: direction-of-rogue ( n -- x y )
+	dup n-to-xy rogue.y > if -1 else 1 then
+	swap n-to-xy drop rogue.x > if -1 else 1 then swap ;
+: enemy-destination-square ( n -- n )
+	dup direction-of-rogue map-width * + + ;
 : enemy-movement
 	populate-move-queue 
 	map-size 0 do
 		unit-move-queue i + c@ if 
-		i i 1+ move-unit then
+		i i enemy-destination-square move-unit then
 	loop ;
 : game-loop
 	hide-cursor
