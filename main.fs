@@ -51,7 +51,16 @@ char ^ constant c-shrub
 char # constant c-rock
 5 constant food-velocity
 
+\ ### UI ###
+: shw-msg ( n addr -- ) 1 map-height at-xy type ;
+: clr-msg pad 80 bl fill pad 80 shw-msg ;
+: add-msg clr-msg shw-msg ;
+
 \ ### MOVEMENT ###
+: n-to-xy ( n -- x y ) map-width /mod ;
+: xy-to-n ( x y -- n ) map-width * + ;
+: @unit ( n -- addr ) units unit-array + ;
+: @item ( n -- addr ) items item-array + ;
 : validate-position
 	rogue.x 0 max to rogue.x
 	rogue.x map-width 1- min to rogue.x
@@ -59,17 +68,26 @@ char # constant c-rock
 	rogue.y map-height 1- min to rogue.y ;
 : is-goal? ( n -- flag ) map + c@ c-goal = ;
 : is-exit? ( n -- flag ) map + c@ c-exit = ;
-: handle-collision ;
-: validate-move ( x-offset y-offset -- flag ) true to do-turn? 2drop true ;
+: attack-enemy ( n -- )
+	@unit unit erase 
+	s" You killed the fae!" add-msg ;
+: is-enemy? ( n -- flag ) @unit @ 0> ;
+: handle-collision ( n -- )
+	dup is-enemy? if attack-enemy else drop then ;
+: validate-move ( x-offset y-offset -- flag ) 
+	rogue.y + swap rogue.x + swap xy-to-n dup
+	is-enemy? if attack-enemy false else 
+	drop true then ;
 : move-rogue.x { x-offset }
     rogue.x x-offset + to rogue.x ;
 : move-rogue.y { y-offset }
     rogue.y y-offset + to rogue.y ;
 : move-rogue { x-offset y-offset } 
+		true to do-turn?
     x-offset y-offset validate-move if
     x-offset move-rogue.x
     y-offset move-rogue.y 
-		else handle-collision
+		 \ else handle-collision
 		then validate-position ;
 : d-left -1 0 ;
 : d-right 1 0 ;
@@ -82,8 +100,6 @@ char # constant c-rock
 : run-rogue ;		\ not implemented
 
 \ ### MAP ###
-: n-to-xy ( n -- x y ) map-width /mod ;
-: xy-to-n ( x y -- n ) map-width * + ;
 : rogue.n rogue.x rogue.y xy-to-n ;
 : top ( n -- n ) map-width - -1 max ;
 : right ( n -- n ) dup map-width mod
@@ -106,8 +122,6 @@ char # constant c-rock
 	2dup bottom-right = if 2drop true exit then
 	bottom-left = if true exit then
 	false ;
-: @unit ( n -- addr ) units unit-array + ;
-: @item ( n -- addr ) items item-array + ;
 : .units map-size 0 do i @unit u.char c@
 	dup 0> if i n-to-xy at-xy emit else drop then loop ;
 : .items map-size 0 do i @item i.char c@ 
@@ -249,7 +263,6 @@ char # constant c-rock
 	if next-level else rogue.n is-goal? if declare-victory then then ;
 : empty-inventory-slot max-inventory 0 do inventory-array i items + @ 
 	0= if inventory-array i items + unloop exit then loop false ;
-: add-msg ( n addr -- ) 1 map-height at-xy type ;
 : pick-up-item empty-inventory-slot dup false = 
 	if drop s" No room for item." add-msg
 	else item-array rogue.n items + tuck swap item move item erase then ;
@@ -257,7 +270,7 @@ char # constant c-rock
 	if pick-up-item then ; 
 : is-dead? ( -- flag ) rogue.hp 0> false = ;
 : process-death update-ui s" You died." toast drop false to is-playing? ;
-: decrement-hp ( n -- ) rogue.hp swap - to rogue.hp ;
+: decrement-hp ( n -- ) rogue.hp swap - 0 max to rogue.hp ;
 : decrement-food turn food-velocity mod 0= 
 	if rogue.food 1- 0 max to rogue.food then ;
 : starve rogue.food 0= if s" You're starving" add-msg 1 decrement-hp then ;
@@ -275,8 +288,11 @@ char # constant c-rock
 	swap rogue.x > if -1 else 1 then swap ;
 : enemy-destination-square ( n -- n )
 	dup direction-of-rogue map-width * + + ;
+: attack-rogue
+	1d6 1 = if s" The fae hits!" add-msg 1d6 decrement-hp 
+	else s" Miss" add-msg then ;
 : enemy-attacks ( n -- flag )
-	rogue.n is-adjacent? dup if s" Attack!" add-msg then ;
+	rogue.n is-adjacent? dup if attack-rogue then ;
 : enemy-movement
 	populate-move-queue 
 	map-size 0 do
@@ -288,6 +304,7 @@ char # constant c-rock
 		am-i-standing-on-something
 		check-for-exit ;
 : post-turn-actions 
+		clr-msg
 		enemy-movement
 		decrement-food
 		starve
