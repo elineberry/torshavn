@@ -33,11 +33,11 @@ here map-size items allot constant item-array
 here map-size allot constant unit-move-queue
 10 constant max-inventory
 here max-inventory items allot constant inventory-array
-char > constant c-exit
+char > constant c-forest-level-exit
 char $ constant c-goal
 125 constant c-tree1	\ {
 123 constant c-tree2	\ } 
-char ^ constant c-shrub
+char ~ constant c-shrub
 char # constant c-rock
 5 constant food-velocity
 
@@ -71,17 +71,32 @@ false value do-turn?
 	rogue.y 0 max to rogue.y
 	rogue.y map-height 1- min to rogue.y ;
 : is-goal? ( n -- flag ) map + c@ c-goal = ;
-: is-exit? ( n -- flag ) map + c@ c-exit = ;
+: is-exit? ( n -- flag ) map + c@ c-forest-level-exit = ;
 : attack-enemy ( n -- )
 	@unit unit erase 
 	s" You killed the fae!" add-msg ;
 : is-enemy? ( n -- flag ) @unit @ 0> ;
 : handle-collision ( n -- )
 	dup is-enemy? if attack-enemy else drop then ;
+: is-forest? map + c@ case
+	c-tree1 of true endof
+	c-tree2 of true endof
+	c-shrub of true endof
+	>r false r> endcase ;
+: is-open-for-rogue? map + c@ case
+	bl of true endof
+	c-forest-level-exit of true endof
+	c-goal of true endof
+	>r false r> endcase ;
+: chop-forest ( n -- ) dup map + c@ 
+	c-shrub = if bl else c-shrub then
+	swap map + c!
+	dread 1+ to dread ;
 : validate-move ( x-offset y-offset -- flag ) 
-	rogue.y + swap rogue.x + swap xy-to-n dup
-	is-enemy? if attack-enemy false else 
-	drop true then ;
+	rogue.y + swap rogue.x + swap xy-to-n
+	dup is-enemy? if attack-enemy false else 
+	dup is-forest? if chop-forest false else
+	is-open-for-rogue? then then ;
 : move-rogue.x { x-offset }
     rogue.x x-offset + to rogue.x ;
 : move-rogue.y { y-offset }
@@ -130,16 +145,18 @@ false value do-turn?
 	dup 0> if i n-to-xy at-xy emit else drop then loop ;
 : .items map-size 0 do i @item i.char c@ 
 	dup 0> if i n-to-xy at-xy emit else drop then loop ;
+: color-for-char ( c -- ) ;
 : .map map-size 0 do i map + c@ i n-to-xy at-xy emit loop ;
 : .rogue [char] @ rogue.x rogue.y at-xy emit ;
 
 \ ### PROCGEN FOREST ###
 : random-char case
-	1 of [char] { endof
-	2 of [char] } endof
-	3 of [char] ~ endof
+	3 of c-tree1 endof
+	4 of c-tree1 endof
+	5 of c-shrub endof
+	6 of c-rock endof	
 	>r bl r> endcase ;
-: exit-or-goal forest-level max-forest-level = if c-goal else c-exit then ;
+: exit-or-goal forest-level max-forest-level = if c-goal else c-forest-level-exit then ;
 : set-forest-level-exit exit-or-goal 0 map-size random-in-range map + c! ;
 : new-forest-level 
 	forest-level 1+ to forest-level 
@@ -160,9 +177,9 @@ false value do-turn?
 	." strength: " rogue.strength 3 u.r ;
 : .debug-line
 	0 map-height 2 + at-xy
-	." location : " rogue.n 4 u.r ." :" rogue.x 2 u.r ." ," rogue.y 2 u.r 
+	." location: " rogue.n 4 u.r ." :" rogue.x 2 u.r ." ," rogue.y 2 u.r 
 	.tab ." here: " here 12 u.r
-	.tab ." depth : " depth . ;
+	.tab ." depth: " depth . ;
 
 \ ### ITEMS ###
 1 constant item-axe
