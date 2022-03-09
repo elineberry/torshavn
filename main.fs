@@ -85,6 +85,27 @@ char # constant c-rock
 : n-to-xy ( n -- x y ) map-width /mod ;
 : xy-to-n ( x y -- n ) map-width * + ;
 : rogue.n rogue.x rogue.y xy-to-n ;
+: top ( n -- n ) map-width - -1 max ;
+: right ( n -- n ) dup map-width mod
+	map-width 1- = if drop -1 else
+	1+ then ;
+: left ( n -- n ) dup map-width mod 0 = 
+	if drop -1 else 1- then ;
+: bottom ( n -- n ) map-width + dup map-size > if drop -1 then ;
+: top-right ( n -- n ) top right ;
+: top-left ( n -- n ) top left ;
+: bottom-right ( n -- n ) bottom right ;
+: bottom-left ( n -- n ) bottom left ;
+: is-adjacent? ( n1 n2 -- flag )
+	2dup top = if 2drop true exit then
+	2dup bottom = if 2drop true exit then
+	2dup left = if 2drop true exit then
+	2dup right = if 2drop true exit then
+	2dup top-right = if 2drop true exit then
+	2dup top-left = if 2drop true exit then
+	2dup bottom-right = if 2drop true exit then
+	bottom-left = if true exit then
+	false ;
 : @unit ( n -- addr ) units unit-array + ;
 : @item ( n -- addr ) items item-array + ;
 : .units map-size 0 do i @unit u.char c@
@@ -254,11 +275,14 @@ char # constant c-rock
 	swap rogue.x > if -1 else 1 then swap ;
 : enemy-destination-square ( n -- n )
 	dup direction-of-rogue map-width * + + ;
+: enemy-attacks ( n -- flag )
+	rogue.n is-adjacent? dup if s" Attack!" add-msg then ;
 : enemy-movement
 	populate-move-queue 
 	map-size 0 do
 		unit-move-queue i + c@ if 
-		i i enemy-destination-square move-unit then
+		i enemy-attacks 0= if
+		i i enemy-destination-square move-unit then then
 	loop ;
 : post-move-actions 
 		am-i-standing-on-something
