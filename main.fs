@@ -1,18 +1,8 @@
 require util.fs
 require random-util.fs
 
-\ ### STATE ###
-0 value turn
-0 value forest-level
-0 value dread 	\ How much the forest wants to kill you
-0 value rogue.x
-0 value rogue.y
-8 value rogue.hp
-100 value rogue.food
-8 value rogue.strength
-0 value forest-level-seed
-false value is-playing?
-false value do-turn?
+\ ### DEFERS ###
+defer 'post-move-actions
 
 \ ### STRUCTS ###
 begin-structure unit
@@ -51,6 +41,20 @@ char ^ constant c-shrub
 char # constant c-rock
 5 constant food-velocity
 
+\ ### STATE ###
+0 value turn
+0 value forest-level
+0 value dread 	\ How much the forest wants to kill you
+0 value rogue.x
+0 value rogue.y
+8 value rogue.max-hp
+rogue.max-hp value rogue.hp
+100 value rogue.food
+8 value rogue.strength
+0 value forest-level-seed
+false value is-playing?
+false value do-turn?
+
 \ ### UI ###
 : shw-msg ( n addr -- ) 1 map-height at-xy type ;
 : clr-msg pad 80 bl fill pad 80 shw-msg ;
@@ -88,7 +92,7 @@ char # constant c-rock
     x-offset move-rogue.x
     y-offset move-rogue.y 
 		 \ else handle-collision
-		then validate-position ;
+		then validate-position 'post-move-actions ;
 : d-left -1 0 ;
 : d-right 1 0 ;
 : d-up 0 -1 ;
@@ -151,7 +155,7 @@ char # constant c-rock
 	." turn: " turn 3 u.r .tab
 	." lvl: " forest-level 3 u.r .tab
 	." dread: " dread 3 u.r .tab
-	." hp: " rogue.hp 3 u.r .tab
+	." hp: " rogue.hp 3 u.r ." (" rogue.max-hp . ." )" .tab
 	." food: " rogue.food 4 u.r .tab
 	." strength: " rogue.strength 3 u.r ;
 : .debug-line
@@ -176,6 +180,15 @@ char # constant c-rock
 		item-medicinedrug of s" The medicine drug" endof
 	endcase ;
 
+: make-item ( type char color food weapon "name" -- )
+	create , , , , , ;
+true false 0 char / item-axe make-item woodsman-axe
+true false 0 char | item-cudgel make-item cudgel
+false true 0 char % item-mushroom make-item wild-mushroom
+false true 0 char % item-bread make-item bread
+false false 0 char ! item-medicinedrug make-item medicinedrug
+
+
 \ ### COMMANDS ###
 : press-any-key-to-continue 10 map-height at-xy ." Press any key to continue"
 	key drop page ;
@@ -187,6 +200,19 @@ char # constant c-rock
 	loop press-any-key-to-continue ;
 : repeat-last-message ;
 : show-help ;
+: drop-item ( n -- )
+	items inventory-array + dup rogue.n @item brk item move brk item erase ;
+: validate-inventory-selection ( n -- flag )
+	items inventory-array + @ 0> ;
+: validate-inventory-input ( n -- flag ) dup 0< swap 9 > or false = ;
+: change-char-to-number ( char -- n ) [char] 0 - ;
+: drop-item-command 
+	s" Drop which item? 0-9" toast 
+	change-char-to-number
+	dup validate-inventory-input false = if drop s" cancelled" add-msg exit then
+	dup validate-inventory-selection
+	if drop-item s" Dropped" add-msg
+	else drop s" No item in that slot" add-msg then ;
 : do-command
 	key
 		case
@@ -207,18 +233,19 @@ char # constant c-rock
 			[char] B of d-left-down run-rogue endof
 			[char] N of d-right-down run-rogue endof
 
+			[char] . of true to do-turn? endof
 			[char] M of repeat-last-message endof
 			[char] q of s" Really quit?" toast [char] y <> to is-playing? endof
 			[char] ? of show-help endof
 			[char] i of show-inventory endof
+			[char] d of drop-item-command endof
 		endcase
 		;
 
 \ ### GAME SETUP ###
 : starting-inventory
-	item-axe inventory-array i.type !
-	item-mushroom inventory-array 1 items + i.type !
-	item-medicinedrug inventory-array 2 items + i.type ! ;
+	medicinedrug bread woodsman-axe 
+	3 0 do i items inventory-array + item move loop ;
 : find-empty-place-on-map ( -- n )
 	begin
 		0 map-size random-in-range dup map + c@
@@ -293,16 +320,21 @@ char # constant c-rock
 	else s" Miss" add-msg then ;
 : enemy-attacks ( n -- flag )
 	rogue.n is-adjacent? dup if attack-rogue then ;
+: is-empty-square? ( n -- flag )
+	dup rogue.n <>
+	swap @unit @ 0= and ;
 : enemy-movement
 	populate-move-queue 
 	map-size 0 do
 		unit-move-queue i + c@ if 
 		i enemy-attacks 0= if
-		i i enemy-destination-square move-unit then then
-	loop ;
+		i i enemy-destination-square 
+		dup is-empty-square? if
+		move-unit else 2drop then then then loop ;
 : post-move-actions 
 		am-i-standing-on-something
 		check-for-exit ;
+' post-move-actions is 'post-move-actions
 : post-turn-actions 
 		clr-msg
 		enemy-movement
@@ -321,7 +353,7 @@ char # constant c-rock
 		update-ui
 		input-loop
 		do-command
-		post-move-actions
+		\ post-move-actions
 		do-turn? if post-turn-actions then
 		is-dead? if process-death then
 		is-playing? 0=

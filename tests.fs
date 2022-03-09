@@ -22,7 +22,16 @@ T{ 0 top -> -1 }T
 T{ 2 50 is-adjacent? -> false }T
 T{ 100 bottom -> 180 }T
 T{ 1000 99 is-adjacent? -> false }T
-T{ 80 1 is-adjacent? -> false }T
-T{ test-adjacent depth -> 0 }T
+T{ 80 1 is-adjacent? -> true }T
+\ T{ test-adjacent depth -> 0 }T
+T{ item1 n-to-xy to rogue.y to rogue.x  pick-up-item inventory-array @ 0> ->
+true }T
+T{ 1 validate-inventory-selection -> false }T
+T{ 0 drop-item inventory-array @ 0> -> false }T
+T{ char x drop-item inventory-array @ 0> -> false }T
+T{ starting-inventory inventory-array @ 0> -> true }T
+T{ depth -> 0 }T
+T{ 0 validate-inventory-input -> true }T
+T{ 10 validate-inventory-input -> false }T
 
 cr cr .( ### COMPLETE ### ) cr cr
