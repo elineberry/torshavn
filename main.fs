@@ -145,8 +145,17 @@ false value do-turn?
 	dup 0> if i n-to-xy at-xy emit else drop then loop ;
 : .items map-size 0 do i @item i.char c@ 
 	dup 0> if i n-to-xy at-xy emit else drop then loop ;
-: color-for-char ( c -- ) ;
-: .map map-size 0 do i map + c@ i n-to-xy at-xy emit loop ;
+: rock-color 35 escape-code ;
+: color-for-char ( c -- ) case
+	c-tree1 of tree-color endof
+	c-tree2 of tree-color endof
+	c-shrub of tree-color endof
+	c-rock of rock-color endof
+	\ c-forest-level-exit of 38 escape-code tty-bold endof
+	>r tty-bold r> endcase ;
+: .map map-size 0 do i map + c@ 
+	dup color-for-char
+	i n-to-xy at-xy emit tty-reset util:set-colors loop ;
 : .rogue [char] @ rogue.x rogue.y at-xy emit ;
 
 \ ### PROCGEN FOREST ###

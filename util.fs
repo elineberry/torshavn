@@ -13,6 +13,7 @@
 : bold-text tty-reset tty-inverse tty-bold ;
 : util:set-bg 40 escape-code ;
 : util:set-fg 38 escape-code ;
+: tree-color 33 escape-code ; \ 43 escape-code ;
 : util:set-colors util:set-bg util:set-fg ;
 : toast { addr n -- key } 
     bold-text
