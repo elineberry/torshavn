@@ -250,8 +250,8 @@ char # constant c-rock
 	unit move
 	@unit unit erase ;
 : direction-of-rogue ( n -- x y )
-	dup n-to-xy rogue.y > if -1 else 1 then
-	swap n-to-xy drop rogue.x > if -1 else 1 then swap ;
+	n-to-xy rogue.y > if -1 else 1 then
+	swap rogue.x > if -1 else 1 then swap ;
 : enemy-destination-square ( n -- n )
 	dup direction-of-rogue map-width * + + ;
 : enemy-movement
@@ -260,6 +260,14 @@ char # constant c-rock
 		unit-move-queue i + c@ if 
 		i i enemy-destination-square move-unit then
 	loop ;
+: post-move-actions 
+		am-i-standing-on-something
+		check-for-exit ;
+: post-turn-actions 
+		enemy-movement
+		decrement-food
+		starve
+		increment-turn ;
 : game-loop
 	hide-cursor
 	util:set-colors
@@ -272,13 +280,8 @@ char # constant c-rock
 		update-ui
 		input-loop
 		do-command
-		\ check for a turn
-		am-i-standing-on-something
-		enemy-movement
-		check-for-exit
-		decrement-food
-		starve
-		increment-turn
+		post-move-actions
+		do-turn? if post-turn-actions then
 		is-dead? if process-death then
 		is-playing? 0=
 	until
