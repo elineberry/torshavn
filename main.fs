@@ -3,6 +3,7 @@ require random-util.fs
 
 \ ### DEFERS ###
 defer 'post-move-actions
+defer 'find-empty-place-on-map ( -- n )
 
 \ ### STRUCTS ###
 begin-structure unit
@@ -206,19 +207,58 @@ fov-step -1 * constant -fov-step
 
 \ ### PROCGEN FOREST ###
 : random-char case
-	3 of c-tree1 endof
-	4 of c-tree1 endof
+	3 of c-rock endof
+	4 of c-rock endof
 	5 of c-shrub endof
-	6 of c-rock endof	
-	>r bl r> endcase ;
+	6 of c-shrub endof	
+	7 of c-tree1 endof
+	8 of c-tree1 endof
+	9 of c-tree1 endof
+	10 of c-tree1 endof
+	11 of c-tree2 endof
+	12 of c-tree2 endof
+	13 of c-tree2 endof
+	14 of c-tree2 endof
+	15 of c-shrub endof
+	16 of c-shrub endof
+	17 of c-rock endof
+	18 of c-rock endof
+	endcase ;
 : exit-or-goal forest-level max-forest-level = if c-goal else c-forest-level-exit then ;
-: set-forest-level-exit exit-or-goal 0 map-size random-in-range map + c! ;
+: set-forest-level-exit exit-or-goal 'find-empty-place-on-map map + c! ;
+: put-trees-in-forest map-size 0 do 3d6 random-char map i + c! loop ;
+: put-bl-on-map map map-size bl fill ;
+: percent-chance ( n -- flag ) 0 100 random-in-range > ;
+: dig-floor ( x y -- )
+	75 percent-chance if 
+	xy-to-n map + bl swap c! else 2drop then ;
+: dig-room { x y width height }
+	height y + y do
+	    width x + x do
+			i j dig-floor
+		loop
+	loop ;
+: dig-random-room
+		0 map-width 18 - random-in-range
+		0 map-height 5 - random-in-range
+		1d6 3 +
+		1d6 2 +
+		dig-room ;
+: empty-spaces-on-map ( -- n )
+	0 map-size 0 do map i + c@ bl = if 1+ then loop ;
+: make-clearings-in-forest
+	10 10 10 5 dig-room
+	begin
+		0 map-size random-in-range n-to-xy 1d6 3 + 1d6 1 + dig-room 	
+		empty-spaces-on-map 500 > 
+	until ;	
 : new-forest-level 
 	forest-level 1+ to forest-level 
 	seed to forest-level-seed
 	40 to rogue.x
 	12 to rogue.y
-	map-size 0 do 3d6 random-char map i + c! loop 
+	put-trees-in-forest
+	make-clearings-in-forest
 	set-forest-level-exit ;
 
 \ ### STATUS LINE ###
@@ -324,6 +364,7 @@ false false 0 char ! item-medicinedrug make-item medicinedrug
 		0 map-size random-in-range dup map + c@
 		bl = if true else drop false then
 	until ;
+' find-empty-place-on-map is 'find-empty-place-on-map
 	
 : store-food-item! ( addr -- ) 
 	dup i.char [char] % swap c!
@@ -338,12 +379,8 @@ false false 0 char ! item-medicinedrug make-item medicinedrug
 \ ### GAME LOOP ###
 : turn+ turn 1+ to turn ;
 : increment-turn do-turn? if turn+ then ;
-: update-ui page .debug-line .status-line .map .items .units .rogue ;
+: update-ui .debug-line .status-line .map .items .units .rogue ;
 : input-loop begin 10 ms key? until ;
-: game-init starting-inventory page true to is-playing? 
-	new-forest-level
-	populate-level-units
-	populate-level-items ;
 : erase-level-items item-array map-size items erase ;
 : erase-level-units unit-array map-size units erase ;
 : erase-level-map map map-size erase ;
@@ -354,11 +391,14 @@ false false 0 char ! item-medicinedrug make-item medicinedrug
 	fov map-size erase
 	visible map-size erase ;
 : next-level 
+	page
 	erase-level
 	new-forest-level
 	populate-level-units
 	populate-level-items
 	find-empty-place-on-map n-to-xy to rogue.y to rogue.x ;	
+: game-init starting-inventory page true to is-playing? 
+	next-level ;
 : declare-victory update-ui s" You win" toast drop false to is-playing? ;
 : check-for-exit rogue.n is-exit?
 	if next-level else rogue.n is-goal? if declare-victory then then ;
