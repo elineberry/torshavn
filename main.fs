@@ -28,6 +28,7 @@ map-width map-height * constant map-size
 13 constant max-forest-level
 here map-size allot constant map
 here map-size allot constant visible
+here map-size allot constant fov
 here map-size units allot constant unit-array
 here map-size items allot constant item-array
 here map-size allot constant unit-move-queue
@@ -141,22 +142,66 @@ false value do-turn?
 	2dup bottom-right = if 2drop true exit then
 	bottom-left = if true exit then
 	false ;
+: is-in-fov? ( n -- ) fov + c@ ;
+: is-visible? ( n -- flag ) visible + c@ ;
 : .units map-size 0 do i @unit u.char c@
-	dup 0> if i n-to-xy at-xy emit else drop then loop ;
+	dup 0> if
+	i is-in-fov? if 	
+i n-to-xy at-xy emit else drop then else drop then loop ;
 : .items map-size 0 do i @item i.char c@ 
-	dup 0> if i n-to-xy at-xy emit else drop then loop ;
+	dup 0> if
+	i is-in-fov? if 	
+i n-to-xy at-xy emit else drop then else drop then loop ;
 : rock-color 35 escape-code ;
 : color-for-char ( c -- ) case
 	c-tree1 of tree-color endof
 	c-tree2 of tree-color endof
 	c-shrub of tree-color endof
 	c-rock of rock-color endof
+	\ bl of 45 escape-code endof
 	\ c-forest-level-exit of 38 escape-code tty-bold endof
 	>r tty-bold r> endcase ;
-: .map map-size 0 do i map + c@ 
+: .map map-size 0 do 
+	i is-visible? if	
+	i map + c@ 
 	dup color-for-char
-	i n-to-xy at-xy emit tty-reset util:set-colors loop ;
+	i is-in-fov? if tty-bold then
+	i n-to-xy at-xy emit tty-reset util:set-colors then loop ;
 : .rogue [char] @ rogue.x rogue.y at-xy emit ;
+
+\ ### FOV ###
+: sq ( n -- n ) dup * ;
+: sqrt ( n -- n ) s>f fsqrt f>s ;
+: .draw-a-circle { radius -- }
+	rogue.y radius + rogue.y radius - brk do 
+		i rogue.y - brk \ int dy = y - center.y
+		sq radius sq - brk sqrt \ float dx  = sqrt(radius*radius - dy*dy);
+		dup rogue.x swap +
+		swap rogue.x - brk
+	\	do i j at-xy [char] X emit loop
+	loop ;
+
+\ ### FOV 2 ###
+5 constant fov-step
+fov-step -1 * constant -fov-step
+4 constant fov-distance
+100 fov-step / constant slope-m
+: add-pt-to-fov ( x y -- ) xy-to-n fov + true swap c! ;
+: add-pt-to-visible ( x y -- ) xy-to-n visible + true swap c! ;
+: sloped-line { x y x-slope y-slope distance }
+  distance 0 do
+	i x-slope * 100 / x +
+	i y-slope * 100 / y +
+	2dup add-pt-to-fov
+	add-pt-to-visible \ TODO check for blocks and edge of board
+  loop ;
+: calculate-fov
+  fov-step -fov-step do fov-step -fov-step do 
+		rogue.x rogue.y i slope-m * j slope-m * fov-distance sloped-line
+	loop loop ;
+: update-fov
+	fov map-size erase
+	calculate-fov ;
 
 \ ### PROCGEN FOREST ###
 : random-char case
@@ -291,8 +336,7 @@ false false 0 char ! item-medicinedrug make-item medicinedrug
 \ ### GAME LOOP ###
 : turn+ turn 1+ to turn ;
 : increment-turn do-turn? if turn+ then ;
-: update-fov ;
-: update-ui .debug-line .status-line .map .items .units .rogue ;
+: update-ui page .debug-line .status-line .map .items .units .rogue ;
 : input-loop begin 10 ms key? until ;
 : game-init starting-inventory page true to is-playing? 
 	new-forest-level
@@ -304,7 +348,9 @@ false false 0 char ! item-medicinedrug make-item medicinedrug
 : erase-level 
 	erase-level-items
 	erase-level-units
-	erase-level-map ;
+	erase-level-map 
+	fov map-size erase
+	visible map-size erase ;
 : next-level 
 	erase-level
 	new-forest-level
