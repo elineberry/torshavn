@@ -55,6 +55,7 @@ rogue.max-hp value rogue.hp
 0 value forest-level-seed
 false value is-playing?
 false value do-turn?
+false value wizard?
 
 \ ### UI ###
 : shw-msg ( n addr -- ) 1 map-height at-xy type ;
@@ -143,7 +144,7 @@ false value do-turn?
 	bottom-left = if true exit then
 	false ;
 : is-in-fov? ( n -- ) fov + c@ ;
-: is-visible? ( n -- flag ) visible + c@ ;
+: is-visible? ( n -- flag ) visible + c@ wizard? or ;
 : .units map-size 0 do i @unit u.char c@
 	dup 0> if
 	i is-in-fov? if 	
@@ -310,6 +311,7 @@ false false 0 char ! item-medicinedrug make-item medicinedrug
 			[char] ? of show-help endof
 			[char] i of show-inventory endof
 			[char] d of drop-item-command endof
+			[char] Z of wizard? 0= to wizard? endof
 		endcase
 		;
 
@@ -367,7 +369,7 @@ false false 0 char ! item-medicinedrug make-item medicinedrug
 	else item-array rogue.n items + tuck swap item move item erase then ;
 : am-i-standing-on-something item-array rogue.n items + i.char c@ 0> 
 	if pick-up-item then ; 
-: is-dead? ( -- flag ) rogue.hp 0> false = ;
+: is-dead? ( -- flag ) wizard? if false else rogue.hp 0> false = then ;
 : process-death update-ui s" You died." toast drop false to is-playing? ;
 : decrement-hp ( n -- ) rogue.hp swap - 0 max to rogue.hp ;
 : decrement-food turn food-velocity mod 0= 
