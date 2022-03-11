@@ -1,5 +1,6 @@
 require util.fs
 require random-util.fs
+require messages.fs
 
 \ ### DEFERS ###
 defer 'post-move-actions
@@ -30,7 +31,7 @@ end-structure
 80 constant map-width
 24 constant map-height
 map-width map-height * constant map-size
-13 constant max-forest-level
+3 constant max-forest-level
 here map-size allot constant map
 here map-size allot constant visible
 here map-size allot constant fov
@@ -65,11 +66,12 @@ false value do-turn?
 false value wizard?
 
 \ ### UI ###
-: shw-msg ( n addr -- ) 1 map-height at-xy type ;
-: clr-msg pad 80 bl fill pad 80 shw-msg ;
-: add-msg clr-msg shw-msg ;
+: .message-line-clear pad 80 bl fill pad 80 0 map-height at-xy type ;
+: .message-line .message-line-clear 0 map-height at-xy msg:show ;
+: add-msg ( addr u -- ) msg:add .message-line ;
 
 \ ### ARRAY ACCESS ###
+: show-everything? forest-level 0= forest-level max-forest-level = or ;
 : bounds-check ( n -- n ) dup map-size > if abort" Out of bounds." then ;
 : is-visible! ( n -- ) bounds-check visible + true swap c! ;
 : is-fov! ( n -- ) bounds-check fov + true swap c! ;
@@ -93,7 +95,7 @@ false value wizard?
 : is-exit? ( n -- flag ) map + c@ c-forest-level-exit = ;
 : attack-enemy ( n -- )
 	@unit unit erase 
-	s" You killed the fae!" add-msg ;
+	s" You killed the fae! " add-msg ;
 : is-enemy? ( n -- flag ) @unit @ 0> ;
 : handle-collision ( n -- )
 	dup is-enemy? if attack-enemy else drop then ;
@@ -110,7 +112,7 @@ false value wizard?
 : darken-forest dread dread-velocity mod 0=
 	if 
 		fov-distance 1 - 1 max to fov-distance 
-		s" The forest grows more foreboding..." add-msg
+		s" The forest grows more foreboding... " add-msg
 	then ;
 : increment-dread
 	dread 1+ to dread 
@@ -170,21 +172,24 @@ false value wizard?
 	2dup bottom-right = if 2drop true exit then
 	bottom-left = if true exit then
 	false ;
-: is-in-fov? ( n -- ) fov + c@ ;
-: is-visible? ( n -- flag ) visible + c@ wizard? or ;
+: is-in-fov? ( n -- ) fov + c@ show-everything?  or ;
+: is-visible? ( n -- flag ) visible + c@ wizard? or show-everything? or ;
 : .units map-size 0 do i @unit u.char c@
 	dup 0> if
 	i is-in-fov? if 	
 i n-to-xy at-xy emit else drop then else drop then loop ;
+: reset-colors tty-reset util:set-colors ;
+: rock-color 35 escape-code ;
+: bright-white-color 97 escape-code ;
 : .items map-size 0 do i @item i.char c@ 
 	dup 0> if
 	i is-in-fov? if 	
-i n-to-xy at-xy emit else drop then else drop then loop ;
-: rock-color 35 escape-code ;
+	bright-white-color
+i n-to-xy at-xy emit reset-colors else drop then else drop then loop ;
 : color-for-char ( c -- ) case
 	c-tree1 of tree-color endof
 	c-tree2 of tree-color endof
-	c-shrub of tree-color endof
+	c-shrub of shrub-color endof
 	c-rock of rock-color endof
 	\ bl of 45 escape-code endof
 	\ c-forest-level-exit of 38 escape-code tty-bold endof
@@ -300,24 +305,28 @@ fov-step -1 * constant -fov-step
 		dig-random-room
 		empty-spaces-on-map map-size 2 / > 
 	until ;	
+: put-rogue-on-map 'find-empty-place-on-map n-to-xy to rogue.y to rogue.x ;
 : new-forest-level 
 	forest-level 1+ to forest-level 
 	seed to forest-level-seed
-	40 to rogue.x
-	12 to rogue.y
 	put-trees-in-forest
 	make-clearings-in-forest
-	set-forest-level-exit ;
+	set-forest-level-exit
+	put-rogue-on-map ;
 
 \ ### STATUS LINE ###
+: status-line-y map-height 1+ ;
+: .status-line-bg pad 80 bl fill 0 status-line-y at-xy pad 80 type ;
 : .status-line 
+	tty-inverse
+	.status-line-bg
 	0 map-height 1+ at-xy
 	." turn: " turn 3 u.r .tab
 	." lvl: " forest-level 3 u.r .tab
 	." dread: " dread 3 u.r .tab
-	." hp: " rogue.hp 3 u.r ." (" rogue.max-hp . ." )" .tab
+	." hp: " rogue.hp 3 u.r .tab
 	." food: " rogue.food 4 u.r .tab
-	." strength: " rogue.strength 3 u.r ;
+	." str: " rogue.strength 3 u.r tty-reset util:set-colors ;
 : .debug-line
 	0 map-height 2 + at-xy
 	." location: " rogue.n 4 u.r ." :" rogue.x 2 u.r ." ," rogue.y 2 u.r 
@@ -348,18 +357,46 @@ false true item-mushroom 0 char %  make-item wild-mushroom
 false true item-bread 0 char %  make-item bread
 false false item-medicinedrug 0 char ! make-item medicinedrug
 
+: make-unit ( hp damage attack activated color char "name" -- )
+	create , , , , , , ;
+1 1 1 false 0 char c make-unit unit-chipmunk
+1 1 5 false 0 char f make-unit unit-fae
+
 
 \ ### COMMANDS ###
-: press-any-key-to-continue 10 map-height at-xy ." Press any key to continue"
-	key drop page ;
+: centered-x ( u -- x ) map-width swap - 2 / ;
+: .centered ( addr u -- ) dup centered-x 1 at-xy type ;
+: .formatted-title ( addr u -- )
+	tty-inverse .centered reset-colors ;
+: .press-key-prompt s" -- press any key to continue --"
+	dup centered-x map-height at-xy type key drop ;
+: title$ s" The Fae Forest" ;
+: version$ s" 1.0" ;
+: show-help
+	page title$ .formatted-title space version$ type
+	CR CR
+	." hjkl -- movement"  CR
+	." yubn -- diagonal movement"  CR
+	CR CR
+	." i    -- show inventory" cr
+	." M    -- message list" CR
+	." q    -- quit game" CR
+	cr .press-key-prompt ;
+
 : show-inventory
-	page 10 2 at-xy ." Inventory " cr cr
+	page s" Inventory" .formatted-title
+	cr cr
 	max-inventory 0 do 
 		inventory-array i items + i.type @
 		dup 0> if i . .tab item$ type cr else drop then 		
-	loop press-any-key-to-continue ;
-: repeat-last-message ;
-: show-help ;
+	loop
+	cr cr .press-key-prompt page ;
+: show-message-history
+	page s" Message History" .formatted-title
+	cr cr
+	msg:show-full
+	cr .press-key-prompt ;
+	
 : drop-item ( n -- )
 	items inventory-array + dup rogue.n @item item move item erase ;
 : validate-inventory-selection ( n -- flag )
@@ -371,10 +408,11 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 	change-char-to-number
 	dup validate-inventory-input false = if drop s" cancelled" add-msg exit then
 	dup validate-inventory-selection
-	if drop-item s" Dropped" add-msg
-	else drop s" No item in that slot" add-msg then ;
+	if drop-item s" Dropped. " add-msg
+	else drop s" No item in that slot. " add-msg then ;
 : do-command
 	key
+		msg:next-line \ This is where we clear the messages from last turn.
 		case
 			[char] h of d-left move-rogue endof
 			[char] j of d-down move-rogue endof
@@ -394,7 +432,7 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 			[char] N of d-right-down run-rogue endof
 
 			[char] . of true to do-turn? endof
-			[char] M of repeat-last-message endof
+			[char] M of show-message-history endof
 			[char] q of s" Really quit?" toast [char] y <> to is-playing? endof
 			[char] ? of show-help endof
 			[char] i of show-inventory endof
@@ -427,7 +465,7 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 \ ### GAME LOOP ###
 : turn+ turn 1+ to turn ;
 : increment-turn do-turn? if turn+ then ;
-: update-ui .debug-line .status-line .map .items .units .rogue ;
+: update-ui .debug-line .status-line .message-line .map .items .units .rogue ;
 : input-loop begin 10 ms key? until ;
 : erase-level-items item-array map-size items erase ;
 : erase-level-units unit-array map-size units erase ;
@@ -440,22 +478,44 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 	visible map-size erase ;
 
 \ ### NEW LEVEL ###
-: next-level 
-	page
-	erase-level
+: put-circle-clearing-in-forest { x y r -- }
+	map-size 0 do 
+		x y i n-to-xy point-angled-distance
+		r <
+		if i n-to-xy dig-floor then 
+	loop ;
+: first-level
+	seed to forest-level-seed
+	put-trees-in-forest 
+	40 12 10 put-circle-clearing-in-forest
+	populate-level-items
+	exit-or-goal 50 12 xy-to-n map!
+	40 to rogue.x 12 to rogue.y ;
+: last-level
+	first-level
+	0 to rogue.x ;
+: middle-level
 	new-forest-level
 	populate-level-units
 	populate-level-items
-	find-empty-place-on-map n-to-xy to rogue.y to rogue.x ;	
+	put-rogue-on-map ;
+: next-level 
+	page
+	erase-level
+	forest-level 0 = if first-level else
+	forest-level max-forest-level = if last-level else
+	middle-level then then ;
 : game-init starting-inventory page true to is-playing? 
 	next-level ;
 : declare-victory update-ui s" You win" toast drop false to is-playing? ;
+: increment-forest-level forest-level 1+ to forest-level ;
 : check-for-exit rogue.n is-exit?
-	if next-level else rogue.n is-goal? if declare-victory then then ;
+	if increment-forest-level next-level else
+	rogue.n is-goal? if declare-victory then then ;
 : empty-inventory-slot max-inventory 0 do inventory-array i items + @ 
 	0= if inventory-array i items + unloop exit then loop false ;
 : pick-up-item empty-inventory-slot dup false = 
-	if drop s" No room for item." add-msg
+	if drop s" No room for item. " add-msg
 	else item-array rogue.n items + tuck swap item move item erase then ;
 : am-i-standing-on-something item-array rogue.n items + i.char c@ 0> 
 	if pick-up-item then ; 
@@ -464,7 +524,7 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 : decrement-hp ( n -- ) rogue.hp swap - 0 max to rogue.hp ;
 : decrement-food turn food-velocity mod 0= 
 	if rogue.food 1- 0 max to rogue.food then ;
-: starve rogue.food 0= if s" You're starving" add-msg 1 decrement-hp then ;
+: starve rogue.food 0= if s" You're starving. " add-msg 1 decrement-hp then ;
 : populate-move-queue
 	unit-move-queue map-size erase 
 	map-size 0 do i @unit @ 0> i unit-move-queue + c! loop ;
@@ -480,8 +540,9 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 : enemy-destination-square ( n -- n )
 	dup direction-of-rogue map-width * + + ;
 : attack-rogue
-	1d6 1 = if s" The fae hits!" add-msg 1d6 decrement-hp 
-	else s" Miss" add-msg then ;
+	s" The fae attacks... " add-msg
+	1d6 1 = if s" The fae hits! " add-msg 1d6 decrement-hp 
+	else s" and misses. "  add-msg then ;
 : enemy-attacks ( n -- flag )
 	rogue.n is-adjacent? dup if attack-rogue then ;
 : is-empty-square? ( n -- flag )
@@ -500,7 +561,6 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 		check-for-exit ;
 ' post-move-actions is 'post-move-actions
 : post-turn-actions 
-		clr-msg
 		enemy-movement
 		decrement-food
 		starve

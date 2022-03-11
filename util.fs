@@ -14,7 +14,10 @@
 : util:set-bg 40 escape-code ;
 : util:set-fg 38 escape-code ;
 : tree-color 33 escape-code ; \ 43 escape-code ;
-: util:set-colors util:set-bg util:set-fg ;
+: shrub-color 34 escape-code ;
+: util:set-colors
+\ util:set-bg
+util:set-fg ;
 : toast { addr n -- key } 
     bold-text
     80 n - 2 / 25 5 - 2 / 

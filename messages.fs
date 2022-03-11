@@ -28,6 +28,7 @@ here msg:buffer-size allot constant msg:buffer
 : msg:erase-full msg:buffer msg:buffer-size erase ;
 : msg:will-fit-on-line? ( n -- flag ) msg:char + msg:width > ;
 : msg:next-line 
+	msg:char 0= if exit then 		\ we are already on a new line
 	msg:line 1+ msg:height mod to msg:line
 	0 to msg:char
 	msg:line-start-current msg:width erase ;
