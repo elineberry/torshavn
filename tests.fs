@@ -30,8 +30,13 @@ T{ 1 validate-inventory-selection -> false }T
 T{ 0 drop-item inventory-array @ 0> -> false }T
 T{ char x drop-item inventory-array @ 0> -> false }T
 T{ starting-inventory inventory-array @ 0> -> true }T
-T{ depth -> 0 }T
 T{ 0 validate-inventory-input -> true }T
 T{ 10 validate-inventory-input -> false }T
+T{ 0 validate-x -> true }T
+T{ 1 1 validate-xy -> true }T
+T{ 80 25 validate-xy -> false }T
+T{ 25 80 validate-xy -> false }T
+T{ 79 23 validate-xy -> true }T
 
+T{ depth -> 0 }T
 cr cr .( ### COMPLETE ### ) cr cr

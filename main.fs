@@ -63,11 +63,21 @@ false value wizard?
 : clr-msg pad 80 bl fill pad 80 shw-msg ;
 : add-msg clr-msg shw-msg ;
 
+\ ### ARRAY ACCESS ###
+: bounds-check ( n -- n ) dup map-size > if abort" Out of bounds." then ;
+: is-visible! ( n -- ) bounds-check visible + true swap c! ;
+: is-fov! ( n -- ) bounds-check fov + true swap c! ;
+: map! ( c n -- ) bounds-check map + c! ;
+
+: n-to-xy ( n -- x y ) bounds-check map-width /mod ;
+: xy-to-n ( x y -- n ) map-width * + bounds-check ;
+: @unit ( n -- addr ) bounds-check units unit-array + ;
+: @item ( n -- addr ) bounds-check items item-array + ;
+
 \ ### MOVEMENT ###
-: n-to-xy ( n -- x y ) map-width /mod ;
-: xy-to-n ( x y -- n ) map-width * + ;
-: @unit ( n -- addr ) units unit-array + ;
-: @item ( n -- addr ) items item-array + ;
+: validate-x ( x -- flag ) dup 0 >= swap map-width < and ;
+: validate-y ( y -- flag ) dup 0 >= swap map-height < and ;
+: validate-xy ( x y -- flag ) validate-y swap validate-x and ;
 : validate-position
 	rogue.x 0 max to rogue.x
 	rogue.x map-width 1- min to rogue.x
@@ -96,7 +106,8 @@ false value wizard?
 	swap map + c!
 	dread 1+ to dread ;
 : validate-move ( x-offset y-offset -- flag ) 
-	rogue.y + swap rogue.x + swap xy-to-n
+	rogue.y + swap rogue.x + swap 2dup validate-xy false = if 2drop false exit then
+	xy-to-n
 	dup is-enemy? if attack-enemy false else 
 	dup is-forest? if chop-forest false else
 	is-open-for-rogue? then then ;
@@ -165,10 +176,9 @@ i n-to-xy at-xy emit else drop then else drop then loop ;
 	>r tty-bold r> endcase ;
 : .map map-size 0 do 
 	i is-visible? if	
-	i map + c@ 
-	dup color-for-char
-	i is-in-fov? if tty-bold then
-	i n-to-xy at-xy emit tty-reset util:set-colors then loop ;
+	i map + c@ else bl then 
+	i is-in-fov? if dup color-for-char then
+	i n-to-xy at-xy emit tty-reset util:set-colors loop ;
 : .rogue [char] @ rogue.x rogue.y at-xy emit ;
 
 \ ### FOV ###
@@ -188,14 +198,17 @@ i n-to-xy at-xy emit else drop then else drop then loop ;
 fov-step -1 * constant -fov-step
 4 constant fov-distance
 100 fov-step / constant slope-m
-: add-pt-to-fov ( x y -- ) xy-to-n fov + true swap c! ;
-: add-pt-to-visible ( x y -- ) xy-to-n visible + true swap c! ;
+: add-pt-to-fov ( x y -- ) xy-to-n is-fov! ;
+: add-pt-to-visible ( x y -- ) xy-to-n is-visible! ;
+: blocks-fov? ( x y -- ) xy-to-n map + c@ bl false = ;
 : sloped-line { x y x-slope y-slope distance }
   distance 0 do
 	i x-slope * 100 / x +
 	i y-slope * 100 / y +
+	2dup validate-xy false = if 2drop unloop exit then
 	2dup add-pt-to-fov
 	add-pt-to-visible \ TODO check for blocks and edge of board
+	\ blocks-fov? if unloop exit then 
   loop ;
 : calculate-fov
   fov-step -fov-step do fov-step -fov-step do 
@@ -229,9 +242,12 @@ fov-step -1 * constant -fov-step
 : put-trees-in-forest map-size 0 do 3d6 random-char map i + c! loop ;
 : put-bl-on-map map map-size bl fill ;
 : percent-chance ( n -- flag ) 0 100 random-in-range > ;
+: dig-floor-validate ( x y -- flag )
+	map-height >= swap map-width >= or ;
 : dig-floor ( x y -- )
+	2dup dig-floor-validate if 2drop exit then
 	75 percent-chance if 
-	xy-to-n map + bl swap c! else 2drop then ;
+	xy-to-n bl swap map! else 2drop then ;
 : dig-room { x y width height }
 	height y + y do
 	    width x + x do
@@ -239,18 +255,19 @@ fov-step -1 * constant -fov-step
 		loop
 	loop ;
 : dig-random-room
-		0 map-width 18 - random-in-range
-		0 map-height 5 - random-in-range
+		0 map-width 10 - random-in-range
+		0 map-height 3 - random-in-range
 		1d6 3 +
-		1d6 2 +
+		2 3 random-in-range
 		dig-room ;
 : empty-spaces-on-map ( -- n )
 	0 map-size 0 do map i + c@ bl = if 1+ then loop ;
 : make-clearings-in-forest
 	10 10 10 5 dig-room
 	begin
-		0 map-size random-in-range n-to-xy 1d6 3 + 1d6 1 + dig-room 	
-		empty-spaces-on-map 500 > 
+	\	0 map-size random-in-range n-to-xy 1d6 3 + 1d6 1 + dig-room 	
+		dig-random-room
+		empty-spaces-on-map map-size 2 / > 
 	until ;	
 : new-forest-level 
 	forest-level 1+ to forest-level 
@@ -313,7 +330,7 @@ false false 0 char ! item-medicinedrug make-item medicinedrug
 : repeat-last-message ;
 : show-help ;
 : drop-item ( n -- )
-	items inventory-array + dup rogue.n @item brk item move brk item erase ;
+	items inventory-array + dup rogue.n @item item move item erase ;
 : validate-inventory-selection ( n -- flag )
 	items inventory-array + @ 0> ;
 : validate-inventory-input ( n -- flag ) dup 0< swap 9 > or false = ;
@@ -409,7 +426,7 @@ false false 0 char ! item-medicinedrug make-item medicinedrug
 	else item-array rogue.n items + tuck swap item move item erase then ;
 : am-i-standing-on-something item-array rogue.n items + i.char c@ 0> 
 	if pick-up-item then ; 
-: is-dead? ( -- flag ) wizard? if false else rogue.hp 0> false = then ;
+: is-dead? ( -- flag ) rogue.hp 0> false = ;
 : process-death update-ui s" You died." toast drop false to is-playing? ;
 : decrement-hp ( n -- ) rogue.hp swap - 0 max to rogue.hp ;
 : decrement-food turn food-velocity mod 0= 
