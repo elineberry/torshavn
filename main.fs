@@ -4,19 +4,23 @@ require random-util.fs
 \ ### DEFERS ###
 defer 'post-move-actions
 defer 'find-empty-place-on-map ( -- n )
+defer 'fov-circle
 
 \ ### STRUCTS ###
 begin-structure unit
 	field: u.char
 	field: u.color
 	field: u.activated
+	field: u.attack
+	field: u.damage
+	field: u.hp
 end-structure
 : units unit * ;
 
 begin-structure item
-	field: i.type
 	field: i.char
 	field: i.color
+	field: i.type
 	field: i.food
 	field: i.weapon
 end-structure
@@ -42,6 +46,7 @@ char $ constant c-goal
 char ~ constant c-shrub
 char # constant c-rock
 5 constant food-velocity
+10 constant dread-velocity
 
 \ ### STATE ###
 0 value turn
@@ -54,6 +59,7 @@ rogue.max-hp value rogue.hp
 100 value rogue.food
 8 value rogue.strength
 0 value forest-level-seed
+7 value fov-distance
 false value is-playing?
 false value do-turn?
 false value wizard?
@@ -101,12 +107,21 @@ false value wizard?
 	c-forest-level-exit of true endof
 	c-goal of true endof
 	>r false r> endcase ;
+: darken-forest dread dread-velocity mod 0=
+	if 
+		fov-distance 1 - 1 max to fov-distance 
+		s" The forest grows more foreboding..." add-msg
+	then ;
+: increment-dread
+	dread 1+ to dread 
+	darken-forest ;
 : chop-forest ( n -- ) dup map + c@ 
 	c-shrub = if bl else c-shrub then
 	swap map + c!
-	dread 1+ to dread ;
+	increment-dread ;
 : validate-move ( x-offset y-offset -- flag ) 
-	rogue.y + swap rogue.x + swap 2dup validate-xy false = if 2drop false exit then
+	rogue.y + swap rogue.x + swap 2dup validate-xy false =
+	if 2drop false exit then
 	xy-to-n
 	dup is-enemy? if attack-enemy false else 
 	dup is-forest? if chop-forest false else
@@ -182,8 +197,6 @@ i n-to-xy at-xy emit else drop then else drop then loop ;
 : .rogue [char] @ rogue.x rogue.y at-xy emit ;
 
 \ ### FOV ###
-: sq ( n -- n ) dup * ;
-: sqrt ( n -- n ) s>f fsqrt f>s ;
 : .draw-a-circle { radius -- }
 	rogue.y radius + rogue.y radius - brk do 
 		i rogue.y - brk \ int dy = y - center.y
@@ -196,7 +209,6 @@ i n-to-xy at-xy emit else drop then else drop then loop ;
 \ ### FOV 2 ###
 5 constant fov-step
 fov-step -1 * constant -fov-step
-4 constant fov-distance
 100 fov-step / constant slope-m
 : add-pt-to-fov ( x y -- ) xy-to-n is-fov! ;
 : add-pt-to-visible ( x y -- ) xy-to-n is-visible! ;
@@ -216,7 +228,7 @@ fov-step -1 * constant -fov-step
 	loop loop ;
 : update-fov
 	fov map-size erase
-	calculate-fov ;
+	rogue.x rogue.y fov-distance 'fov-circle ;
 
 \ ### PROCGEN FOREST ###
 : random-char case
@@ -260,6 +272,25 @@ fov-step -1 * constant -fov-step
 		1d6 3 +
 		2 3 random-in-range
 		dig-room ;
+: dx-dy { x1 y1 x2 y2 -- dx dy }
+	x1 x2 max x1 x2 min -
+	y1 y2 max y1 y2 min - ;	
+: angled-distance { dx dy -- n }
+	dx sq dy sq + sqrt ;
+: point-angled-distance dx-dy angled-distance ;
+: is-fov-visible! ( n -- ) dup is-visible! is-fov! ;
+: fov-circle { x y r -- }
+	\ move to top right of square
+	\ loop through square
+	\ if distance is less than radius
+	\ sqrt( dx*dx + dy*dy )
+	\ draw or something		
+	map-size 0 do 
+		x y i n-to-xy point-angled-distance
+		r <
+		if i is-fov-visible! then 
+	loop ;
+' fov-circle is 'fov-circle
 : empty-spaces-on-map ( -- n )
 	0 map-size 0 do map i + c@ bl = if 1+ then loop ;
 : make-clearings-in-forest
@@ -311,11 +342,11 @@ fov-step -1 * constant -fov-step
 
 : make-item ( type char color food weapon "name" -- )
 	create , , , , , ;
-true false 0 char / item-axe make-item woodsman-axe
-true false 0 char | item-cudgel make-item cudgel
-false true 0 char % item-mushroom make-item wild-mushroom
-false true 0 char % item-bread make-item bread
-false false 0 char ! item-medicinedrug make-item medicinedrug
+true false item-axe 0 char /  make-item woodsman-axe
+true false item-cudgel 0 char | make-item cudgel
+false true item-mushroom 0 char %  make-item wild-mushroom
+false true item-bread 0 char %  make-item bread
+false false item-medicinedrug 0 char ! make-item medicinedrug
 
 
 \ ### COMMANDS ###
@@ -388,7 +419,7 @@ false false 0 char ! item-medicinedrug make-item medicinedrug
 	item-mushroom swap ! ;	
 	
 : populate-level-items 1d6 0 do 
-		find-empty-place-on-map @item store-food-item! loop ;
+		wild-mushroom find-empty-place-on-map @item item move loop ;
 : populate-level-units 1d6 0 do
 		[char] f find-empty-place-on-map @unit u.char ! loop ;
 
@@ -407,6 +438,8 @@ false false 0 char ! item-medicinedrug make-item medicinedrug
 	erase-level-map 
 	fov map-size erase
 	visible map-size erase ;
+
+\ ### NEW LEVEL ###
 : next-level 
 	page
 	erase-level
@@ -484,7 +517,6 @@ false false 0 char ! item-medicinedrug make-item medicinedrug
 		update-ui
 		input-loop
 		do-command
-		\ post-move-actions
 		do-turn? if post-turn-actions then
 		is-dead? if process-death then
 		is-playing? 0=

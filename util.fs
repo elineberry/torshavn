@@ -31,6 +31,8 @@ if ." ### YOU'VE GOT A PROBLEM ###" cr .s cr else ." √" then cr cr ;
 : util:out-of-memory abort" Probably out of memory" ;
 : allocate-or-abort allocate util:out-of-memory ;
 
+: sq ( n -- n ) dup * ;
+: sqrt ( n -- n ) s>f fsqrt f>s ;
 
 \ DEBUG HELPERS
 true constant DEBUG
