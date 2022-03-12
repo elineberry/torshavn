@@ -96,6 +96,7 @@ false value wizard?
 : @item-type ( n - n ) @item i.type @ ;
 : @inventory-type ( n - n ) @inventory i.type @ ;
 : @unit-is-activated? ( n -- flag ) @unit u.activated c@ ;
+: deactivate-unit! ( n -- ) @unit u.activated false swap c! ;
 
 \ ### MOVEMENT ###
 : validate-x ( x -- flag ) dup 0 >= swap map-width < and ;
@@ -138,13 +139,12 @@ false value wizard?
 	increment-dread ;
 : damage-enemy ( n -- )
 	@unit unit erase 
-	s" You killed the fae! " add-msg ;
+	s" You killed the fae creature! " add-msg ;
 : is-enemy? ( n -- flag ) @unit @ 0> ;
 : to-hit-chance ( --n ) 90 dread - 15 max ;
 : attack-enemy ( n -- )
-	s" You swing at the forest creature with your axe... " add-msg
-\	to-hit-chance percent-chance
-	false
+	s" You swing at the creature with your axe... " add-msg
+ 	to-hit-chance percent-chance
 	if damage-enemy else 'activate-unit! s" miss. " add-msg then increment-dread ;
 : validate-move ( x-offset y-offset -- flag ) 
 	rogue.y + swap rogue.x + swap 2dup validate-xy false =
@@ -197,7 +197,7 @@ false value wizard?
 	2dup bottom-right = if 2drop true exit then
 	bottom-left = if true exit then
 	false ;
-: is-in-fov? ( n -- ) fov + c@ show-everything?  or ;
+: is-in-fov? ( n -- ) fov + c@ ;
 : is-visible? ( n -- flag ) visible + c@ show-everything? or ;
 : reset-colors tty-reset util:set-colors ;
 : bright-white-color 97 escape-code ;
@@ -208,7 +208,7 @@ false value wizard?
 : activated-enemy-color bright-green-color ;
 : rock-color 35 escape-code ;
 : item-color bright-cyan-color ;
-: enemy-color 32 escape-code ;
+: enemy-color 37 escape-code ;
 : rogue-color bright-white-color ;
 : .units map-size 0 do i @unit u.char c@
 	dup 0>
@@ -471,9 +471,11 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 	rogue.n @item-type item-mushroom = ;
 : dropped-mushroom-effects
 	dropped-a-mushroom? if
+	s" You dropped a wild mushroom. " add-msg
+	rogue.n @item item erase
 	map-size 0 do 
 		i is-in-fov?
-		if false i @unit u.activated c! then 
+		if i deactivate-unit! then 
 	loop then ;
 : drop-item ( n -- )
 	items inventory-array + dup rogue.n @item item move item erase ;

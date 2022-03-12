@@ -10,6 +10,7 @@ here msg:buffer-size allot constant msg:buffer
 \ ### VARIABLES ###
 0 value msg:line
 0 value msg:char
+false value msg:do-clear?
 
 \ ### CALCULATED ###
 : msg:lines ( n -- n ) msg:width * ;
@@ -18,7 +19,9 @@ here msg:buffer-size allot constant msg:buffer
 : msg:pointer msg:line-start-current msg:char + ;
 
 \ ### DISPLAY ###
-: msg:show msg:line-start-current msg:width type ;
+: msg:clear 2dup pad 80 bl fill pad 80 type false to msg:do-clear? ;
+: msg:show 
+	msg:line-start-current msg:width type ;
 : msg:show-full 
 	msg:height 0 do 
 		i msg:line + 1+ msg:height mod msg:line-start msg:width type cr
@@ -28,6 +31,7 @@ here msg:buffer-size allot constant msg:buffer
 : msg:erase-full msg:buffer msg:buffer-size erase ;
 : msg:will-fit-on-line? ( n -- flag ) msg:char + msg:width > ;
 : msg:next-line 
+	true to msg:do-clear?
 	msg:char 0= if exit then 		\ we are already on a new line
 	msg:line 1+ msg:height mod to msg:line
 	0 to msg:char
@@ -35,7 +39,7 @@ here msg:buffer-size allot constant msg:buffer
 : msg:trim ( n -- n ) msg:width min ;
 : msg:add ( addr n -- ) 
 	msg:trim
-	>r r@ msg:will-fit-on-line?  negate if msg:next-line then 
+	>r r@ msg:will-fit-on-line? negate if msg:next-line then 
 	 msg:pointer r@  move 
 	msg:char r> + to msg:char ;
 
