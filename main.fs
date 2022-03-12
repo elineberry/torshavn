@@ -7,6 +7,7 @@ defer 'post-move-actions
 defer 'find-empty-place-on-map ( -- n )
 defer 'fov-circle
 defer 'is-empty-square?
+defer 'activate-unit!
 
 \ ### STRUCTS ###
 begin-structure unit
@@ -80,7 +81,8 @@ false value wizard?
 : add-msg ( addr u -- ) msg:add .message-line ;
 
 \ ### ARRAY ACCESS ###
-: show-everything? forest-level 0= forest-level max-forest-level = or ;
+: show-everything? wizard? forest-level 0= or
+	forest-level max-forest-level = or ;
 : bounds-check ( n -- n ) dup map-size > if abort" Out of bounds." then ;
 : is-visible! ( n -- ) bounds-check visible + true swap c! ;
 : is-fov! ( n -- ) bounds-check fov + true swap c! ;
@@ -134,14 +136,16 @@ false value wizard?
 	c-shrub = if bl else c-shrub then
 	swap map + c!
 	increment-dread ;
+: damage-enemy ( n -- )
+	@unit unit erase 
+	s" You killed the fae! " add-msg ;
+: is-enemy? ( n -- flag ) @unit @ 0> ;
+: to-hit-chance ( --n ) 90 dread - 15 max ;
 : attack-enemy ( n -- )
 	s" You swing at the forest creature with your axe... " add-msg
-	increment-dread
-	90 percent-chance if
-	increment-dread
-	@unit unit erase 
-	s" You killed the fae! " add-msg else drop s" miss. " add-msg then ;
-: is-enemy? ( n -- flag ) @unit @ 0> ;
+\	to-hit-chance percent-chance
+	false
+	if damage-enemy else 'activate-unit! s" miss. " add-msg then increment-dread ;
 : validate-move ( x-offset y-offset -- flag ) 
 	rogue.y + swap rogue.x + swap 2dup validate-xy false =
 	if 2drop false exit then
@@ -194,7 +198,7 @@ false value wizard?
 	bottom-left = if true exit then
 	false ;
 : is-in-fov? ( n -- ) fov + c@ show-everything?  or ;
-: is-visible? ( n -- flag ) visible + c@ wizard? or show-everything? or ;
+: is-visible? ( n -- flag ) visible + c@ show-everything? or ;
 : reset-colors tty-reset util:set-colors ;
 : rock-color 35 escape-code ;
 : bright-white-color 97 escape-code ;
@@ -377,8 +381,8 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 
 : make-unit ( hp damage attack activated color char "name" -- )
 	create , , , , , , ;
-1 1 1 true 0 char c make-unit unit-chipmunk
-1 1 5 true 0 char f make-unit unit-fae
+1 1 1 false 0 char c make-unit unit-chipmunk
+1 1 5 false 0 char f make-unit unit-fae
 
 
 \ ### COMMANDS ###
@@ -582,6 +586,16 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 : decrement-food turn food-velocity mod 0= 
 	if rogue.food 1- 0 max to rogue.food then ;
 : starve rogue.food 0= if s" You're starving. " add-msg 1 decrement-hp then ;
+: has-unit? ( n -- flag ) @unit @ 0> ;
+: activate-unit! ( n -- ) @unit u.activated true swap c! ;
+' activate-unit! is 'activate-unit!
+: activate-units-for-next-turn
+	map-size 0 do 
+		i has-unit? if
+			dread percent-chance if 	
+				i activate-unit! then
+		then 
+	loop ;
 : unit-is-activated? ( n -- flag ) @unit u.activated c@ ;
 : populate-move-queue
 	unit-move-queue map-size erase 
@@ -621,6 +635,7 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 ' post-move-actions is 'post-move-actions
 : post-turn-actions 
 		enemy-movement
+		activate-units-for-next-turn
 		decrement-food
 		starve
 		increment-turn ;
