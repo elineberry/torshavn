@@ -359,7 +359,7 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 
 : make-unit ( hp damage attack activated color char "name" -- )
 	create , , , , , , ;
-1 1 1 false 0 char c make-unit unit-chipmunk
+1 1 1 true 0 char c make-unit unit-chipmunk
 1 1 5 false 0 char f make-unit unit-fae
 
 
@@ -396,7 +396,19 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 	cr cr
 	msg:show-full
 	cr .press-key-prompt ;
-	
+: am-i-carrying-mushrooms? ( -- n ) max-inventory 0 do 
+	i items inventory-array + i.type @ item-mushroom =
+	if true unloop exit then loop false ;
+: benefits-of-eating-mushroom rogue.hp 1d6 + to rogue.hp
+	rogue.food 3d6 + to rogue.food ;
+: eat-mushroom max-inventory 0 do
+	i items inventory-array + i.type @ item-mushroom = 
+	if i items inventory-array + item erase unloop exit then loop ;
+: prompt-to-eat-mushroom s" Eat a wild mushroom?" toast [char] y = if
+	eat-mushroom benefits-of-eating-mushroom then ;
+: eat-something am-i-carrying-mushrooms?
+	if prompt-to-eat-mushroom else
+	s" You don't have any mushrooms. " add-msg then ;
 : drop-item ( n -- )
 	items inventory-array + dup rogue.n @item item move item erase ;
 : validate-inventory-selection ( n -- flag )
@@ -432,6 +444,7 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 			[char] N of d-right-down run-rogue endof
 
 			[char] . of true to do-turn? endof
+			[char] e of eat-something endof
 			[char] M of show-message-history endof
 			[char] q of s" Really quit?" toast [char] y <> to is-playing? endof
 			[char] ? of show-help endof
@@ -455,11 +468,12 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 : store-food-item! ( addr -- ) 
 	dup i.char [char] % swap c!
 	item-mushroom swap ! ;	
-	
+
+: random-unit ( -- addr ) 1d6 2 > if unit-fae else unit-chipmunk then ;
 : populate-level-items 1d6 0 do 
 		wild-mushroom find-empty-place-on-map @item item move loop ;
 : populate-level-units 1d6 0 do
-		[char] f find-empty-place-on-map @unit u.char ! loop ;
+	random-unit find-empty-place-on-map @unit unit move loop ;
 
 
 \ ### GAME LOOP ###
@@ -484,16 +498,20 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 		r <
 		if i n-to-xy dig-floor then 
 	loop ;
+: clear-rogue-square bl rogue.n map! ;
 : first-level
 	seed to forest-level-seed
 	put-trees-in-forest 
 	40 12 10 put-circle-clearing-in-forest
 	populate-level-items
 	exit-or-goal 50 12 xy-to-n map!
-	40 to rogue.x 12 to rogue.y ;
+	40 to rogue.x 12 to rogue.y 
+	clear-rogue-square ;
 : last-level
 	first-level
-	0 to rogue.x ;
+	7 0 do i 5 * 8 14 random-in-range 3 put-circle-clearing-in-forest loop 
+	0 to rogue.x 
+	clear-rogue-square ;
 : middle-level
 	new-forest-level
 	populate-level-units
@@ -525,9 +543,10 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 : decrement-food turn food-velocity mod 0= 
 	if rogue.food 1- 0 max to rogue.food then ;
 : starve rogue.food 0= if s" You're starving. " add-msg 1 decrement-hp then ;
+: unit-is-activated? ( n -- flag ) @unit u.activated c@ ;
 : populate-move-queue
 	unit-move-queue map-size erase 
-	map-size 0 do i @unit @ 0> i unit-move-queue + c! loop ;
+	map-size 0 do i unit-is-activated? i unit-move-queue + c! loop ;
 : move-unit ( from-unit-no to-unit-no -- ) 
 	@unit 					\ from-no to-addr
 	over @unit			\ from-no to-addr from-addr
@@ -583,5 +602,5 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 	until
   show-cursor ;
 
-: start-new-game random-init game-loop page .debug-check-end ;
-: str start-new-game ;
+: start-new-game random-init game-loop page ;
+: str start-new-game .debug-check-end ;
