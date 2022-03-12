@@ -409,6 +409,7 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 	."    Map Items " cr cr
 	." letter -- enemy" cr
 	." }{~    -- forest" cr
+	." %      -- wild mushroom" cr
 	." >      -- level exit" cr
 	." $      -- final exit" cr
 	cr
@@ -427,7 +428,18 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 : show-story
 	page title$ .formatted-title space version$ type
 	cr cr
-	." You must take the medicinedrug to the final destination " cr	
+	." King Torshavn is dying." cr
+	cr
+	." A sickness fouls his blood and he grows weaker every day. " cr
+	." You must carry the life saving medicinedrug through the " cr
+	." fae forest and deliver it to the palace before the king" cr
+	." perishes and the land is plunged into chaos or democracy." cr
+	cr
+	." Journey lightly and swift. Do not disturb the peace of the" cr
+	." forest or the creatures within!" cr
+	cr
+	." Wild mushrooms will sustain you and draw creatures away from" cr
+	." you when dropped. Use them wisely!"
 	cr .press-key-prompt ;
 : show-inventory
 	page s" Inventory" .formatted-title
@@ -665,6 +677,8 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 	util:set-colors
 	game-init
 	util:set-colors
+	show-story
+	show-help
 	begin
 		false to do-turn?
 		util:set-colors
