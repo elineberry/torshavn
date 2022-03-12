@@ -7,5 +7,6 @@ require random.fs
 : 1d6 ( -- n ) 6 random 1+ ;
 : 2d6 ( -- n ) 1d6 1d6 + ;
 : 3d6 ( -- b ) 1d6 1d6 1d6 + + ;
+: percent-chance ( n -- flag ) 0 100 random-in-range > ;
 
 random-init

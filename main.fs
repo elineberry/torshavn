@@ -49,6 +49,14 @@ char # constant c-rock
 5 constant food-velocity
 10 constant dread-velocity
 
+\ ### ITEM TYPES ###
+1 constant item-axe
+2 constant item-mushroom
+3 constant item-cudgel
+4 constant item-bread
+99 constant item-medicinedrug
+
+
 \ ### STATE ###
 0 value turn
 0 value forest-level
@@ -93,12 +101,6 @@ false value wizard?
 	rogue.y map-height 1- min to rogue.y ;
 : is-goal? ( n -- flag ) map + c@ c-goal = ;
 : is-exit? ( n -- flag ) map + c@ c-forest-level-exit = ;
-: attack-enemy ( n -- )
-	@unit unit erase 
-	s" You killed the fae! " add-msg ;
-: is-enemy? ( n -- flag ) @unit @ 0> ;
-: handle-collision ( n -- )
-	dup is-enemy? if attack-enemy else drop then ;
 : is-forest? map + c@ case
 	c-tree1 of true endof
 	c-tree2 of true endof
@@ -117,10 +119,24 @@ false value wizard?
 : increment-dread
 	dread 1+ to dread 
 	darken-forest ;
-: chop-forest ( n -- ) dup map + c@ 
+: am-i-weilding-an-axe? ( -- flag ) max-inventory 0 do 
+	i items inventory-array + i.type @ item-axe =
+	if true unloop exit then loop false ;
+: chop-forest ( n -- ) 
+	am-i-weilding-an-axe? false = if drop
+	s" You need an axe to cut trees. " add-msg exit then
+	dup map + c@ 
 	c-shrub = if bl else c-shrub then
 	swap map + c!
 	increment-dread ;
+: attack-enemy ( n -- )
+	s" You swing at the forest creature with your axe... " add-msg
+	increment-dread
+	90 percent-chance if
+	increment-dread
+	@unit unit erase 
+	s" You killed the fae! " add-msg else drop s" miss. " add-msg then ;
+: is-enemy? ( n -- flag ) @unit @ 0> ;
 : validate-move ( x-offset y-offset -- flag ) 
 	rogue.y + swap rogue.x + swap 2dup validate-xy false =
 	if 2drop false exit then
@@ -137,7 +153,6 @@ false value wizard?
     x-offset y-offset validate-move if
     x-offset move-rogue.x
     y-offset move-rogue.y 
-		 \ else handle-collision
 		then validate-position 'post-move-actions ;
 : d-left -1 0 ;
 : d-right 1 0 ;
@@ -258,7 +273,6 @@ fov-step -1 * constant -fov-step
 : set-forest-level-exit exit-or-goal 'find-empty-place-on-map map + c! ;
 : put-trees-in-forest map-size 0 do 3d6 random-char map i + c! loop ;
 : put-bl-on-map map map-size bl fill ;
-: percent-chance ( n -- flag ) 0 100 random-in-range > ;
 : dig-floor-validate ( x y -- flag )
 	map-height >= swap map-width >= or ;
 : dig-floor ( x y -- )
@@ -334,12 +348,6 @@ fov-step -1 * constant -fov-step
 	.tab ." depth: " depth . ;
 
 \ ### ITEMS ###
-1 constant item-axe
-2 constant item-mushroom
-3 constant item-cudgel
-4 constant item-bread
-99 constant item-medicinedrug
-
 : item$ ( n -- n addr )
 	case
 		item-axe of s" A woodman's axe" endof
@@ -360,7 +368,7 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 : make-unit ( hp damage attack activated color char "name" -- )
 	create , , , , , , ;
 1 1 1 true 0 char c make-unit unit-chipmunk
-1 1 5 false 0 char f make-unit unit-fae
+1 1 5 true 0 char f make-unit unit-fae
 
 
 \ ### COMMANDS ###
@@ -375,10 +383,14 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 : show-help
 	page title$ .formatted-title space version$ type
 	CR CR
+	." ?    -- help (this screen)" cr
+	cr cr
 	." hjkl -- movement"  CR
 	." yubn -- diagonal movement"  CR
 	CR CR
 	." i    -- show inventory" cr
+	." e    -- eat a mushroom" cr
+	." d    -- drop an item" cr
 	." M    -- message list" CR
 	." q    -- quit game" CR
 	cr .press-key-prompt ;
@@ -418,7 +430,7 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 : drop-item-command 
 	s" Drop which item? 0-9" toast 
 	change-char-to-number
-	dup validate-inventory-input false = if drop s" cancelled" add-msg exit then
+	dup validate-inventory-input false = if drop s" canceled " add-msg exit then
 	dup validate-inventory-selection
 	if drop-item s" Dropped. " add-msg
 	else drop s" No item in that slot. " add-msg then ;
@@ -472,7 +484,7 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 : random-unit ( -- addr ) 1d6 2 > if unit-fae else unit-chipmunk then ;
 : populate-level-items 1d6 0 do 
 		wild-mushroom find-empty-place-on-map @item item move loop ;
-: populate-level-units 1d6 0 do
+: populate-level-units 3d6 0 do
 	random-unit find-empty-place-on-map @unit unit move loop ;
 
 
