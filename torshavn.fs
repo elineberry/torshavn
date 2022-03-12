@@ -572,8 +572,8 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 	seed to forest-level-seed
 	put-trees-in-forest 
 	40 12 10 put-circle-clearing-in-forest
+	exit-or-goal 47 12 xy-to-n map!
 	populate-level-items
-	exit-or-goal 50 12 xy-to-n map!
 	40 to rogue.x 12 to rogue.y 
 	clear-rogue-square ;
 : last-level
