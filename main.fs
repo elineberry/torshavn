@@ -6,6 +6,7 @@ require messages.fs
 defer 'post-move-actions
 defer 'find-empty-place-on-map ( -- n )
 defer 'fov-circle
+defer 'is-empty-square?
 
 \ ### STRUCTS ###
 begin-structure unit
@@ -89,6 +90,10 @@ false value wizard?
 : xy-to-n ( x y -- n ) map-width * + bounds-check ;
 : @unit ( n -- addr ) bounds-check units unit-array + ;
 : @item ( n -- addr ) bounds-check items item-array + ;
+: @inventory ( n -- addr ) items inventory-array + ;
+: @item-type ( n - n ) @item i.type @ ;
+: @inventory-type ( n - n ) @inventory i.type @ ;
+: @unit-is-activated? ( n -- flag ) @unit u.activated c@ ;
 
 \ ### MOVEMENT ###
 : validate-x ( x -- flag ) dup 0 >= swap map-width < and ;
@@ -153,7 +158,8 @@ false value wizard?
     x-offset y-offset validate-move if
     x-offset move-rogue.x
     y-offset move-rogue.y 
-		then validate-position 'post-move-actions ;
+		'post-move-actions
+		then validate-position ;
 : d-left -1 0 ;
 : d-right 1 0 ;
 : d-up 0 -1 ;
@@ -189,13 +195,17 @@ false value wizard?
 	false ;
 : is-in-fov? ( n -- ) fov + c@ show-everything?  or ;
 : is-visible? ( n -- flag ) visible + c@ wizard? or show-everything? or ;
-: .units map-size 0 do i @unit u.char c@
-	dup 0> if
-	i is-in-fov? if 	
-i n-to-xy at-xy emit else drop then else drop then loop ;
 : reset-colors tty-reset util:set-colors ;
 : rock-color 35 escape-code ;
 : bright-white-color 97 escape-code ;
+: .units map-size 0 do i @unit u.char c@
+	dup 0>
+	if i is-in-fov?
+	if i @unit-is-activated? if bright-white-color else reset-colors then 
+	i n-to-xy at-xy emit
+	else drop then
+	else drop then
+	loop reset-colors ;
 : .items map-size 0 do i @item i.char c@ 
 	dup 0> if
 	i is-in-fov? if 	
@@ -213,7 +223,7 @@ i n-to-xy at-xy emit reset-colors else drop then else drop then loop ;
 	i is-visible? if	
 	i map + c@ else bl then 
 	i is-in-fov? if dup color-for-char then
-	i n-to-xy at-xy emit tty-reset util:set-colors loop ;
+	i n-to-xy at-xy emit reset-colors loop ;
 : .rogue [char] @ rogue.x rogue.y at-xy emit ;
 
 \ ### FOV ###
@@ -350,11 +360,11 @@ fov-step -1 * constant -fov-step
 \ ### ITEMS ###
 : item$ ( n -- n addr )
 	case
-		item-axe of s" A woodman's axe" endof
-		item-mushroom of s" mushroom" endof
+		item-axe of s" woodman's axe" endof
+		item-mushroom of s" wild mushroom" endof
 		item-cudgel of s" cudgel" endof
 		item-bread of s" a loaf of bread" endof 
-		item-medicinedrug of s" The medicine drug" endof
+		item-medicinedrug of s" medicine drug" endof
 	endcase ;
 
 : make-item ( type char color food weapon "name" -- )
@@ -421,6 +431,14 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 : eat-something am-i-carrying-mushrooms?
 	if prompt-to-eat-mushroom else
 	s" You don't have any mushrooms. " add-msg then ;
+: dropped-a-mushroom? ( -- flag )
+	rogue.n @item-type item-mushroom = ;
+: dropped-mushroom-effects
+	dropped-a-mushroom? if
+	map-size 0 do 
+		i is-in-fov?
+		if false i @unit u.activated c! then 
+	loop then ;
 : drop-item ( n -- )
 	items inventory-array + dup rogue.n @item item move item erase ;
 : validate-inventory-selection ( n -- flag )
@@ -432,7 +450,7 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 	change-char-to-number
 	dup validate-inventory-input false = if drop s" canceled " add-msg exit then
 	dup validate-inventory-selection
-	if drop-item s" Dropped. " add-msg
+	if drop-item dropped-mushroom-effects s" Dropped. " add-msg
 	else drop s" No item in that slot. " add-msg then ;
 : do-command
 	key
@@ -544,9 +562,18 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 	rogue.n is-goal? if declare-victory then then ;
 : empty-inventory-slot max-inventory 0 do inventory-array i items + @ 
 	0= if inventory-array i items + unloop exit then loop false ;
+: 'notify-pickup 
+	pad 80 erase s" Picked up " pad swap move
+	rogue.n @item i.char c@ item$ pad 10 + swap move
+	pad 50 add-msg ;
+: notify-pickup 
+	s" Picked up " add-msg 
+	rogue.n @item i.type @ item$ add-msg ;
 : pick-up-item empty-inventory-slot dup false = 
 	if drop s" No room for item. " add-msg
-	else item-array rogue.n items + tuck swap item move item erase then ;
+	else
+	notify-pickup
+	item-array rogue.n items + tuck swap item move item erase then ;
 : am-i-standing-on-something item-array rogue.n items + i.char c@ 0> 
 	if pick-up-item then ; 
 : is-dead? ( -- flag ) rogue.hp 0> false = ;
@@ -579,6 +606,7 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 : is-empty-square? ( n -- flag )
 	dup rogue.n <>
 	swap @unit @ 0= and ;
+' is-empty-square? is 'is-empty-square?
 : enemy-movement
 	populate-move-queue 
 	map-size 0 do
