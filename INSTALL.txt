@@ -1,0 +1,8 @@
+Torshavn runs under gforth.
+
+Linux / MacOS: install gforth with your favorite package manager. Then
+run start.sh from a terminal.
+
+Windows: install gforth using the included installer. Then run
+windows.bat.
+
