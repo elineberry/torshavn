@@ -200,21 +200,30 @@ false value wizard?
 : is-in-fov? ( n -- ) fov + c@ show-everything?  or ;
 : is-visible? ( n -- flag ) visible + c@ show-everything? or ;
 : reset-colors tty-reset util:set-colors ;
-: rock-color 35 escape-code ;
 : bright-white-color 97 escape-code ;
+: bright-green-color 92 escape-code ;
+: bright-gray-color 90 escape-code ;
+: bright-magenta-color 95 escape-code ;
+: bright-cyan-color 96 escape-code ;
+: activated-enemy-color bright-green-color ;
+: rock-color 35 escape-code ;
+: item-color bright-cyan-color ;
+: enemy-color 32 escape-code ;
+: rogue-color bright-white-color ;
 : .units map-size 0 do i @unit u.char c@
 	dup 0>
 	if i is-in-fov?
-	if i @unit-is-activated? if bright-white-color else reset-colors then 
+	if i @unit-is-activated? if activated-enemy-color else enemy-color then 
 	i n-to-xy at-xy emit
 	else drop then
 	else drop then
 	loop reset-colors ;
-: .items map-size 0 do i @item i.char c@ 
+: .items
+	item-color
+	map-size 0 do i @item i.char c@ 
 	dup 0> if
 	i is-in-fov? if 	
-	bright-white-color
-i n-to-xy at-xy emit reset-colors else drop then else drop then loop ;
+	i n-to-xy at-xy emit else drop then else drop then loop reset-colors ;
 : color-for-char ( c -- ) case
 	c-tree1 of tree-color endof
 	c-tree2 of tree-color endof
@@ -228,7 +237,7 @@ i n-to-xy at-xy emit reset-colors else drop then else drop then loop ;
 	i map + c@ else bl then 
 	i is-in-fov? if dup color-for-char then
 	i n-to-xy at-xy emit reset-colors loop ;
-: .rogue [char] @ rogue.x rogue.y at-xy emit ;
+: .rogue rogue-color [char] @ rogue.x rogue.y at-xy emit reset-colors ;
 
 \ ### FOV ###
 : .draw-a-circle { radius -- }
@@ -392,23 +401,34 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 	tty-inverse .centered reset-colors ;
 : .press-key-prompt s" -- press any key to continue --"
 	dup centered-x map-height at-xy type key drop ;
-: title$ s" The Fae Forest" ;
+: title$ s" Torshavn: The Fae Forest" ;
 : version$ s" 1.0" ;
 : show-help
 	page title$ .formatted-title space version$ type
 	CR CR
-	." ?    -- help (this screen)" cr
-	cr cr
+	."    Map Items " cr cr
+	." letter -- enemy" cr
+	." }{~    -- forest" cr
+	." >      -- level exit" cr
+	." $      -- final exit" cr
+	cr
+	."   Commands " cr cr
 	." hjkl -- movement"  CR
 	." yubn -- diagonal movement"  CR
-	CR CR
+	CR
+	." ?    -- help (this screen)" cr
 	." i    -- show inventory" cr
 	." e    -- eat a mushroom" cr
 	." d    -- drop an item" cr
-	." M    -- message list" CR
+	." m    -- message list" CR
+	." s    -- show story" cr
 	." q    -- quit game" CR
 	cr .press-key-prompt ;
-
+: show-story
+	page title$ .formatted-title space version$ type
+	cr cr
+	." You must take the medicinedrug to the final destination " cr	
+	cr .press-key-prompt ;
 : show-inventory
 	page s" Inventory" .formatted-title
 	cr cr
@@ -479,12 +499,13 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 
 			[char] . of true to do-turn? endof
 			[char] e of eat-something endof
-			[char] M of show-message-history endof
+			[char] m of show-message-history endof
 			[char] q of s" Really quit?" toast [char] y <> to is-playing? endof
 			[char] ? of show-help endof
 			[char] i of show-inventory endof
 			[char] d of drop-item-command endof
-			[char] Z of wizard? 0= to wizard? endof
+			[char] s of show-story endof
+			[char] Z of debug? if wizard? 0= to wizard? then endof
 		endcase
 		;
 
