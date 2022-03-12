@@ -365,10 +365,11 @@ fov-step -1 * constant -fov-step
 	." food: " rogue.food 4 u.r .tab
 	." str: " rogue.strength 3 u.r tty-reset util:set-colors ;
 : .debug-line
+	debug if 
 	0 map-height 2 + at-xy
 	." location: " rogue.n 4 u.r ." :" rogue.x 2 u.r ." ," rogue.y 2 u.r 
 	.tab ." here: " here 12 u.r
-	.tab ." depth: " depth . ;
+	.tab ." depth: " depth . then ;
 
 \ ### ITEMS ###
 : item$ ( n -- n addr )
@@ -519,7 +520,7 @@ false false item-medicinedrug 0 char ! make-item medicinedrug
 			[char] i of show-inventory endof
 			[char] d of drop-item-command endof
 			[char] s of show-story endof
-			[char] Z of debug? if wizard? 0= to wizard? then endof
+			[char] Z of debug if wizard? 0= to wizard? then endof
 		endcase
 		;
 

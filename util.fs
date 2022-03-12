@@ -16,8 +16,8 @@
 : tree-color 33 escape-code ; \ 43 escape-code ;
 : shrub-color 34 escape-code ;
 : util:set-colors
-\ util:set-bg
-util:set-fg ;
+	util:set-bg
+	util:set-fg ;
 : toast { addr n -- key } 
     bold-text
     80 n - 2 / 25 5 - 2 / 
@@ -38,7 +38,7 @@ if ." ### YOU'VE GOT A PROBLEM ###" cr .s cr else ." √" then cr cr ;
 : sqrt ( n -- n ) s>f fsqrt f>s ;
 
 \ DEBUG HELPERS
-true constant DEBUG
+false constant DEBUG
 true constant POPULATE?
 : BREAKPT DEBUG if 0 28 at-xy .s key drop then ;
 : BRK BREAKPT ;
