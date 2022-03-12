@@ -33,7 +33,7 @@ end-structure
 80 constant map-width
 24 constant map-height
 map-width map-height * constant map-size
-3 constant max-forest-level
+13 constant max-forest-level
 here map-size allot constant map
 here map-size allot constant visible
 here map-size allot constant fov
