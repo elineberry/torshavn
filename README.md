@@ -1,7 +1,7 @@
 # torshavn
 2022 7DRL
 
-Torhavn: The Fae Forest is an ascii roguelike.
+Torshavn: The Fae Forest is an ascii roguelike.
 
 It requires gforth to run.
 
